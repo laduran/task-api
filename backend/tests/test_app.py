@@ -138,6 +138,27 @@ def test_readiness_reports_503_when_the_database_is_unreachable(app):
         assert client.get("/readyz").status_code == 503
 
 
+def test_connection_urls_are_rewritten_to_the_psycopg_driver():
+    """Hosted providers hand out driver-less URLs; SQLAlchemy would pick psycopg2.
+
+    This is the exact failure that broke the first Render deploy:
+    ModuleNotFoundError: No module named 'psycopg2'.
+    """
+    from db import normalise_driver
+
+    neon = "postgresql://u:p@ep-x.aws.neon.tech/neondb?sslmode=require"
+    assert normalise_driver(neon) == (
+        "postgresql+psycopg://u:p@ep-x.aws.neon.tech/neondb?sslmode=require"
+    )
+
+    # Heroku-style legacy scheme, which SQLAlchemy rejects outright.
+    assert normalise_driver("postgres://u:p@h/db") == "postgresql+psycopg://u:p@h/db"
+
+    # An explicit driver is left alone.
+    already = "postgresql+psycopg://u:p@h/db"
+    assert normalise_driver(already) == already
+
+
 # --- OpenAPI document ------------------------------------------------------
 
 

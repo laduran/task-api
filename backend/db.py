@@ -20,8 +20,28 @@ class Base(DeclarativeBase):
     """Declarative base shared by every model."""
 
 
+def normalise_driver(url: str) -> str:
+    """Force the psycopg (v3) driver in a connection URL.
+
+    Hosted providers hand out URLs that name no driver: Neon and Render use
+    ``postgresql://``, which SQLAlchemy maps to **psycopg2** — a package we
+    deliberately do not install — and Heroku-style ``postgres://``, which
+    SQLAlchemy rejects outright. Rewriting the scheme here means a platform's
+    connection string can be pasted in unmodified.
+
+    A URL that already names a driver (``postgresql+psycopg://``) is returned
+    untouched, as are non-Postgres URLs.
+    """
+    if url.startswith("postgresql+"):
+        return url
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix) :]
+    return url
+
+
 def database_url() -> str:
-    return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
+    return normalise_driver(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
 
 
 def init_app(app: Flask, url: str | None = None) -> None:
@@ -31,7 +51,7 @@ def init_app(app: Flask, url: str | None = None) -> None:
     without a reachable database — the spec dump relies on that.
     """
     engine = create_engine(
-        url or database_url(),
+        normalise_driver(url) if url else database_url(),
         # Postgres connections are dropped by idle timeouts and by restarts of
         # the database container; pre-ping discards dead ones transparently.
         pool_pre_ping=True,
