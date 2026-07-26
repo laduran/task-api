@@ -40,9 +40,15 @@ def app():
 
 @pytest.fixture(autouse=True)
 def clean_tables(app):
-    """Empty the tables and reset the id sequence before each test."""
+    """Empty the tables and reset the id sequence before each test.
+
+    request_metrics is truncated too: every test request runs through the
+    real after_request hook, so leftover counts from an earlier test would
+    otherwise leak into whichever test checks /metrics/summary.
+    """
     with app.extensions["engine"].begin() as connection:
         connection.execute(text("TRUNCATE tasks RESTART IDENTITY CASCADE"))
+        connection.execute(text("TRUNCATE request_metrics"))
     yield
 
 
@@ -138,6 +144,43 @@ def test_readiness_reports_503_when_the_database_is_unreachable(app):
         assert client.get("/readyz").status_code == 503
 
 
+# --- request metrics --------------------------------------------------------
+
+
+def test_metrics_summary_counts_requests_by_status_class(client):
+    client.get("/tasks")
+    client.get("/tasks")
+    client.get("/tasks/999")  # 404
+
+    summary = client.get("/metrics/summary").get_json()
+    assert summary["total_requests"] == 3
+    assert summary["total_errors"] == 1
+    assert summary["error_rate"] == pytest.approx(1 / 3, abs=1e-4)
+
+    bucket = summary["buckets"][0]
+    assert bucket["count"] == 3
+    assert bucket["errors"] == 1
+    assert bucket["avg_duration_ms"] >= 0
+
+
+def test_metrics_summary_excludes_health_checks_and_itself(client):
+    """Otherwise Render's health-check polling would dominate the numbers."""
+    client.get("/healthz")
+    client.get("/readyz")
+    client.get("/metrics/summary")
+
+    summary = client.get("/metrics/summary").get_json()
+    assert summary["total_requests"] == 0
+
+
+def test_metrics_summary_window_is_clamped(client):
+    """A caller can't ask for an unbounded window and force a huge scan."""
+    client.get("/tasks")
+
+    summary = client.get("/metrics/summary?minutes=999999").get_json()
+    assert summary["window_minutes"] == 24 * 60
+
+
 def test_connection_urls_are_rewritten_to_the_psycopg_driver():
     """Hosted providers hand out driver-less URLs; SQLAlchemy would pick psycopg2.
 
@@ -184,8 +227,10 @@ def test_spec_is_a_valid_openapi_document(client):
 UNDOCUMENTED_ENDPOINTS = {
     "static",
     "index",
+    "dashboard",
     "healthz",
     "readyz",
+    "metrics_summary",
     "api-docs.openapi_json",
     "api-docs.openapi_swagger_ui",
 }
