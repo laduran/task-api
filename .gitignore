@@ -10,3 +10,9 @@ node_modules/
 # Build output
 static/js/
 *.map
+
+# Secrets — DATABASE_URL and friends belong in Render's dashboard and a
+# password manager, never in a file that could end up staged by accident.
+.env
+.env.*
+*.secret
