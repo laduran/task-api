@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to the same branch supersedes the run in progress.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: taskapi
+          POSTGRES_PASSWORD: taskapi
+          POSTGRES_DB: taskapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskapi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://taskapi:taskapi@localhost:5432/taskapi
+      TEST_DATABASE_URL: postgresql+psycopg://taskapi:taskapi@localhost:5432/taskapi_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Match the runtime image (python:3.13-slim) rather than the latest.
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements-dev.txt
+
+      - name: Create the test database
+        # Done in Python rather than with createdb: psycopg is already
+        # installed, so this does not depend on the runner shipping psql.
+        run: |
+          python - <<'PY'
+          import psycopg
+          conn = psycopg.connect(
+              "postgresql://taskapi:taskapi@localhost:5432/postgres", autocommit=True
+          )
+          conn.execute("CREATE DATABASE taskapi_test")
+          print("created taskapi_test")
+          PY
+
+      - name: Run tests
+        working-directory: backend
+        # Applies the real migrations from an empty database, so this also
+        # proves the migration chain works from zero.
+        run: pytest tests/ -q
+
+  frontend:
+    name: Frontend typecheck and build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        # `npm ci` fails if package-lock.json has drifted from package.json.
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  image:
+    name: Image build and smoke test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: taskapi
+          POSTGRES_PASSWORD: taskapi
+          POSTGRES_DB: taskapi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskapi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # Explicit: the default target would be whatever stage is last.
+          target: production
+          push: false
+          load: true
+          tags: taskapi:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start the container
+        # --network host so the container reaches the Postgres service, which
+        # is published on the runner's localhost.
+        run: |
+          docker run -d --name api --network host \
+            -e DATABASE_URL=postgresql+psycopg://taskapi:taskapi@localhost:5432/taskapi \
+            -e PORT=8000 \
+            taskapi:ci
+
+      - name: Smoke test
+        run: |
+          set -e
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/healthz >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+
+          echo "--- liveness ---"
+          curl -fsS http://localhost:8000/healthz
+          echo
+          echo "--- readiness (proves the container reached Postgres) ---"
+          curl -fsS http://localhost:8000/readyz
+          echo
+          echo "--- create a task through the running image ---"
+          curl -fsS -X POST http://localhost:8000/tasks \
+            -H 'Content-Type: application/json' \
+            -d '{"title":"ci smoke test"}'
+          echo
+          echo "--- list ---"
+          curl -fsS http://localhost:8000/tasks
+          echo
+          echo "--- the front end is served from the image ---"
+          curl -fsS -o /dev/null -w 'index.html %{http_code}\n' http://localhost:8000/
+          curl -fsS -o /dev/null -w 'app.js     %{http_code}\n' http://localhost:8000/static/js/app.js
+
+      - name: Container logs
+        if: always()
+        run: docker logs api
