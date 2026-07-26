@@ -27,5 +27,21 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: .
+    container_name: taskapi-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        # Wait for Postgres to accept connections, not merely to start,
+        # otherwise the entrypoint's `alembic upgrade` races the database.
+        condition: service_healthy
+    environment:
+      # `db` is the compose service name, resolved on the internal network.
+      DATABASE_URL: postgresql+psycopg://taskapi:taskapi@db:5432/taskapi
+      WEB_CONCURRENCY: 2
+    ports:
+      - "127.0.0.1:8000:8000"
+
 volumes:
   pgdata:

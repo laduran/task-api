@@ -1,0 +1,18 @@
+# Keeping these out of the build context matters: .venv and node_modules are
+# the bulk of the directory, and copying them in would both slow the build and
+# bloat the image with host-specific binaries.
+
+**/.venv/
+**/node_modules/
+**/__pycache__/
+**/*.py[cod]
+
+.git/
+.gitignore
+.pytest_cache/
+
+# Built by the frontend stage; never copy a stale host build in.
+static/js/
+
+*.md
+docker-compose.yml

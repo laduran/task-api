@@ -12,6 +12,8 @@ from typing import Any
 
 from flask import Flask
 from flask_smorest import Api
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 import db
 from views import blp
@@ -65,6 +67,34 @@ def create_app(database_url: str | None = None) -> Flask:
         in the tests).
         """
         return app.send_static_file("index.html")
+
+    @app.get("/healthz")
+    def healthz() -> Any:
+        """Liveness: this process is running.
+
+        Deliberately does *not* touch the database. A liveness probe that
+        depends on Postgres would have the orchestrator kill and restart every
+        container during a database blip, turning a brief outage into a
+        restart storm.
+        """
+        return {"status": "ok"}
+
+    @app.get("/readyz")
+    def readyz() -> Any:
+        """Readiness: dependencies are reachable, so send traffic here.
+
+        This one *does* check the database, because a container that cannot
+        reach Postgres should be pulled from the load balancer without being
+        restarted.
+        """
+        session = db.session()
+        try:
+            session.execute(text("SELECT 1"))
+        except SQLAlchemyError as exc:
+            session.rollback()
+            app.logger.warning("readiness check failed: %s", exc)
+            return {"status": "unavailable", "detail": "database unreachable"}, 503
+        return {"status": "ready"}
 
     return app
 

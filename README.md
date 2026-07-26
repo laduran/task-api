@@ -15,7 +15,10 @@ lightweight hypermedia-style front ends against heavyweight SPA frameworks.
 ```
 exercise1/
 ├── README.md
-├── docker-compose.yml  local Postgres
+├── Dockerfile          multi-stage: node builds the bundle, python serves
+├── .dockerignore
+├── docker-entrypoint.sh
+├── docker-compose.yml  Postgres + the API
 ├── backend/            Flask API
 │   ├── app.py            application factory, OpenAPI config
 │   ├── views.py          routes (the Blueprint the spec is generated from)
@@ -23,6 +26,7 @@ exercise1/
 │   ├── models.py         SQLAlchemy models
 │   ├── db.py             engine + per-request session
 │   ├── alembic/          migrations
+│   ├── gunicorn.conf.py  production server settings
 │   ├── openapi.json      generated — do not edit by hand
 │   ├── requirements.txt
 │   └── tests/
@@ -85,6 +89,47 @@ cd backend
 | <http://127.0.0.1:5000/> | the demo front end |
 | <http://127.0.0.1:5000/docs> | Swagger UI |
 | <http://127.0.0.1:5000/openapi.json> | the generated spec |
+
+## Running in a container
+
+The whole stack, built and wired together:
+
+```bash
+docker compose up -d --build
+```
+
+That serves the same URLs on <http://127.0.0.1:8000>. The image is
+multi-stage — Node builds the TypeScript bundle in the first stage and never
+reaches the runtime image, which is Python only. `npm run build` typechecks
+before bundling, so a type error fails the image build.
+
+The entrypoint runs `alembic upgrade head` before starting gunicorn, so a
+deploy migrates itself. Set `RUN_MIGRATIONS=0` to skip that if you'd rather
+run migrations as a separate release step (worth doing once you run more than
+a couple of replicas).
+
+Everything is environment-driven, so the same image runs unchanged locally and
+on a platform:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | local compose db | connection string |
+| `PORT` | `8000` | port gunicorn binds |
+| `WEB_CONCURRENCY` | `4` | gunicorn worker count |
+| `RUN_MIGRATIONS` | `1` | run `alembic upgrade head` on start |
+| `GUNICORN_TIMEOUT` | `30` | seconds before a wedged worker is killed |
+
+### Health checks
+
+| Endpoint | Checks | Use for |
+| --- | --- | --- |
+| `/healthz` | process is up; **no** database access | liveness probe |
+| `/readyz` | `SELECT 1` against Postgres | readiness probe |
+
+They are deliberately separate. A liveness probe that touched the database
+would have the orchestrator restart every container during a brief Postgres
+outage, turning a blip into a restart storm. Readiness failing just removes
+the container from the load balancer, which is the correct response.
 
 ## Development
 

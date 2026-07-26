@@ -120,6 +120,24 @@ def test_routing_errors_return_json(client):
         assert response.is_json
 
 
+def test_health_endpoints(client):
+    liveness = client.get("/healthz")
+    assert liveness.status_code == 200
+    assert liveness.get_json()["status"] == "ok"
+
+    readiness = client.get("/readyz")
+    assert readiness.status_code == 200
+    assert readiness.get_json()["status"] == "ready"
+
+
+def test_readiness_reports_503_when_the_database_is_unreachable(app):
+    """A dead database must fail readiness, not liveness."""
+    broken = create_app("postgresql+psycopg://taskapi:taskapi@127.0.0.1:1/nope")
+    with broken.test_client() as client:
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/readyz").status_code == 503
+
+
 # --- OpenAPI document ------------------------------------------------------
 
 
@@ -145,6 +163,8 @@ def test_spec_is_a_valid_openapi_document(client):
 UNDOCUMENTED_ENDPOINTS = {
     "static",
     "index",
+    "healthz",
+    "readyz",
     "api-docs.openapi_json",
     "api-docs.openapi_swagger_ui",
 }
