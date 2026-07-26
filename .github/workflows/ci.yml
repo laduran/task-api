@@ -156,13 +156,48 @@ jobs:
           echo "--- readiness (proves the container reached Postgres) ---"
           curl -fsS http://localhost:8000/readyz
           echo
-          echo "--- create a task through the running image ---"
+
+          echo "--- unauthenticated request is rejected (the auth gate is live) ---"
+          http_status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/tasks)
+          test "$http_status" = "401"
+          echo "401 as expected"
+          echo
+
+          # Forge a valid session cookie using the running container's own
+          # session_interface — reuses Flask's real signing logic exactly,
+          # rather than reimplementing itsdangerous' parameters by hand and
+          # risking a subtly wrong salt/digest that "looks right" but isn't.
+          # Same technique used to visually verify the signed-in UI locally.
+          echo "--- seed a user and forge a session, via the container's own code ---"
+          COOKIE=$(docker exec api python3 -c "
+          from datetime import datetime, timezone
+          from app import create_app
+          import db
+          from models import User
+
+          app = create_app()
+          with app.app_context():
+              session = db.session()
+              user = session.query(User).filter_by(google_sub='ci-smoke-test').first()
+              if user is None:
+                  user = User(
+                      google_sub='ci-smoke-test', email='ci@example.com',
+                      name='CI Smoke Test', created_at=datetime.now(timezone.utc),
+                  )
+                  session.add(user)
+                  session.commit()
+              serializer = app.session_interface.get_signing_serializer(app)
+              print(serializer.dumps({'user_id': user.id}))
+          ")
+
+          echo "--- create a task through the running image, authenticated ---"
           curl -fsS -X POST http://localhost:8000/tasks \
             -H 'Content-Type: application/json' \
+            -H "Cookie: session=$COOKIE" \
             -d '{"title":"ci smoke test"}'
           echo
           echo "--- list ---"
-          curl -fsS http://localhost:8000/tasks
+          curl -fsS -H "Cookie: session=$COOKIE" http://localhost:8000/tasks
           echo
           echo "--- the front end is served from the image ---"
           curl -fsS -o /dev/null -w 'index.html %{http_code}\n' http://localhost:8000/
