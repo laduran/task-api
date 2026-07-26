@@ -105,7 +105,7 @@ def create_app(database_url: str | None = None) -> Flask:
         rel=icon> tag in the page. Serving it here means that probe gets a
         real 200, not a 404 padding out the metrics dashboard's error rate.
         """
-        return app.send_static_file("favicon.svg")
+        return app.send_static_file("favicon.ico")
 
     @app.get("/metrics/summary")
     def metrics_summary() -> Any:
