@@ -9,7 +9,7 @@
 <!-- Applies the saved theme before first paint. This has to be inline and
      synchronous: doing it from the deferred bundle would render the default
      theme first and visibly flash. Key must match STORAGE_KEY in theme.ts. -->
-<script>try{document.documentElement.dataset.theme=localStorage.getItem("task-api-theme")||"light"}catch(e){}</script>
+<script>try{const t=localStorage.getItem("task-api-theme");document.documentElement.dataset.theme=t==="dark"||t==="light"?t:"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
 <style>
   /* Themes are user-selected only — the system preference is deliberately
      not consulted, so the toggle is the single source of truth. */
