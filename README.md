@@ -1,5 +1,7 @@
 # Task API
 
+[![CI](https://github.com/laduran/task-api/actions/workflows/ci.yml/badge.svg)](https://github.com/laduran/task-api/actions/workflows/ci.yml)
+
 A small CRUD task API with a TypeScript + Alpine.js front end, built to compare
 lightweight hypermedia-style front ends against heavyweight SPA frameworks.
 
@@ -215,6 +217,22 @@ back to the environment. The default is the local compose database.
 Tests run against a **separate** `taskapi_test` database (override with
 `TEST_DATABASE_URL`) and apply the real migrations rather than `create_all`,
 so a broken migration fails the suite instead of reaching production.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and PR to `main`, in three
+parallel jobs:
+
+| Job | Does | Catches |
+| --- | --- | --- |
+| Backend tests | pytest against a real Postgres service container | behaviour regressions, spec drift, a stale `openapi.json`, a broken migration chain |
+| Frontend | `npm ci`, `npm run typecheck`, `npm run build` | type errors, a lockfile out of sync with `package.json` |
+| Image | builds the production target, then smoke-tests the running container | a broken Dockerfile, a container that can't reach Postgres or serve its assets |
+
+The backend job migrates an empty database from zero, so it proves the whole
+Alembic chain applies cleanly — something a locally migrated database can't
+tell you. The image job asserts `/healthz`, `/readyz`, a real `POST /tasks`,
+and that both `index.html` and the bundle are served from inside the image.
 
 ## The API
 
