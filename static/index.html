@@ -37,6 +37,9 @@
     font-size: 1rem; line-height: 1; border-radius: 50%;
   }
   .sub { color: var(--muted); font-size: .875rem; margin-bottom: 1.5rem; }
+  /* Without this, links fall back to the browser's default dark blue, which
+     is effectively unreadable against the dark theme's background. */
+  a { color: var(--accent); }
   .panel {
     background: var(--panel); border: 1px solid var(--line);
     border-radius: 10px; overflow: hidden;
