@@ -29,8 +29,10 @@ exercise1/
 │   ├── alembic.ini       migration config (holds no connection string)
 │   ├── gunicorn.conf.py  production server settings
 │   ├── openapi.json      generated — do not edit by hand
-│   ├── requirements.txt
+│   ├── requirements.txt      runtime deps only
+│   ├── requirements-dev.txt  adds the test runner
 │   └── tests/
+├── docker/init-db/     runs once when the Postgres volume is created
 ├── frontend/           TypeScript sources
 │   ├── src/
 │   │   ├── main.ts       registers the component, starts Alpine
@@ -142,6 +144,41 @@ They are deliberately separate. A liveness probe that touched the database
 would have the orchestrator restart every container during a brief Postgres
 outage, turning a blip into a restart storm. Readiness failing just removes
 the container from the load balancer, which is the correct response.
+
+## Everything in containers (no local toolchain)
+
+If you'd rather not install Python or Node on the host, every step has a
+container equivalent. These live under a `dev` compose profile, so a plain
+`docker compose up` ignores them.
+
+```bash
+docker compose up -d --build            # run the app on :8000
+
+docker compose --profile dev run --rm test                    # run the tests
+docker compose --profile dev run --rm frontend npm run build  # production bundle
+docker compose --profile dev up -d frontend                   # watch mode
+```
+
+Notes on how this is wired:
+
+- **`test`** builds the `dev` image target — the runtime image plus
+  `requirements-dev.txt` — so tests run against exactly the Python and
+  dependency set production uses. Source is bind-mounted, so edits take effect
+  without a rebuild.
+- **`frontend`** bakes `node_modules` into its image rather than mounting it,
+  and mounts only `src/` and `tsconfig.json`. It runs as uid 1000 so the bundle
+  it writes into `static/` stays editable from the host.
+- Watch mode uses esbuild's `--watch=forever`; plain `--watch` exits as soon as
+  stdin closes, which is always the case for a detached container.
+- **`npm run dev` emits an unminified bundle** (~116 KB) and `npm run build`
+  emits a minified one (~48 KB). Both are correct; just don't be surprised when
+  the file size changes. The production image always runs `build` internally,
+  so what's in `static/` on your host never affects the image.
+
+The test database is created automatically when the Postgres volume is first
+initialised (`docker/init-db/`). An existing volume predates that script, so
+create it once by hand — see [Database](#database) — or `docker compose down -v`
+to start fresh.
 
 ## Development
 

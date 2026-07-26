@@ -55,3 +55,38 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["gunicorn", "app:app"]
+
+
+# --- stage 3: dev/test image ------------------------------------------------
+# Adds the test runner on top of the runtime image, so tests execute against
+# the same Python and the same installed dependencies that production uses.
+# Built only when explicitly targeted (`--target dev`), never by default.
+FROM runtime AS dev
+
+USER root
+COPY backend/requirements-dev.txt /app/backend/requirements-dev.txt
+RUN pip install --no-cache-dir -r /app/backend/requirements-dev.txt
+USER appuser
+
+CMD ["pytest", "tests/", "-q"]
+
+
+# --- frontend watch image ---------------------------------------------------
+# node_modules is baked in rather than mounted: an anonymous volume over it is
+# created root-owned, which a non-root container user cannot install into.
+FROM node:22-alpine AS frontend-dev
+
+WORKDIR /build/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/tsconfig.json ./
+
+USER node
+CMD ["npm", "run", "dev"]
+
+
+# --- default target ---------------------------------------------------------
+# `docker build .` with no --target builds the LAST stage, so this alias must
+# stay at the bottom: without it the default build would be the dev image,
+# shipping pytest and defaulting to running the test suite instead of serving.
+FROM runtime AS production

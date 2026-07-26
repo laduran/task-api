@@ -21,6 +21,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Runs only on first initialisation of the volume; creates taskapi_test.
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U taskapi -d taskapi"]
       interval: 5s
@@ -28,7 +30,10 @@ services:
       retries: 5
 
   api:
-    build: .
+    build:
+      context: .
+      # Explicit, so this can never accidentally pick up the dev stage.
+      target: production
     container_name: taskapi-api
     restart: unless-stopped
     depends_on:
@@ -42,6 +47,47 @@ services:
       WEB_CONCURRENCY: 2
     ports:
       - "127.0.0.1:8000:8000"
+
+  # --- development helpers --------------------------------------------------
+  # Under the "dev" profile, so a plain `docker compose up` ignores them.
+  # Run with: docker compose --profile dev run --rm <service>
+
+  test:
+    build:
+      context: .
+      target: dev
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["dev"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://taskapi:taskapi@db:5432/taskapi
+      TEST_DATABASE_URL: postgresql+psycopg://taskapi:taskapi@db:5432/taskapi_test
+      # The suite applies migrations itself; the entrypoint must not race it.
+      RUN_MIGRATIONS: "0"
+    volumes:
+      # Source is mounted, not baked in, so edits take effect without rebuilding.
+      - ./backend:/app/backend
+      - ./static:/app/static
+    # The mount is owned by the host user but the container runs as appuser, so
+    # pytest cannot write .pytest_cache. Nothing here needs it.
+    command: ["pytest", "tests/", "-q", "-p", "no:cacheprovider"]
+
+  frontend:
+    build:
+      context: .
+      target: frontend-dev
+    profiles: ["dev"]
+    # The image's "node" user is uid 1000, matching a typical host account, so
+    # the bundle written into static/ stays editable from the host rather than
+    # landing root-owned.
+    user: node
+    volumes:
+      # Only sources are mounted; node_modules comes from the image, so the
+      # host never needs npm installed.
+      - ./frontend/src:/build/frontend/src:ro
+      - ./frontend/tsconfig.json:/build/frontend/tsconfig.json:ro
+      - ./static:/build/static
 
 volumes:
   pgdata:

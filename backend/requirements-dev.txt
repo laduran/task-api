@@ -1,0 +1,6 @@
+# Test-only dependencies. Kept out of requirements.txt so the runtime image
+# does not ship a test runner.
+-r requirements.txt
+
+pytest>=8.0.0
+openapi-spec-validator>=0.7.0

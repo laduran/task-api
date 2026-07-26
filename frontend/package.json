@@ -7,7 +7,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && esbuild src/main.ts --bundle --minify --sourcemap --target=es2020 --format=iife --outfile=../static/js/app.js",
-    "dev": "esbuild src/main.ts --bundle --sourcemap --target=es2020 --format=iife --outfile=../static/js/app.js --watch"
+    "dev": "esbuild src/main.ts --bundle --sourcemap --target=es2020 --format=iife --outfile=../static/js/app.js --watch=forever"
   },
   "dependencies": {
     "alpinejs": "^3.14.1"
