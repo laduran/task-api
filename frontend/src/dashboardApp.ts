@@ -22,6 +22,10 @@ interface DashboardAppData {
   summary: Summary | null;
   loading: boolean;
   error: string;
+  /** Bumped on every load() call; guards against a slow, superseded
+   * request's response overwriting a faster, later one — e.g. switching the
+   * window selector before the previous fetch has returned. */
+  requestId: number;
   readonly recentBuckets: Bucket[];
   readonly errorRatePercent: string;
   init(): void;
@@ -42,6 +46,7 @@ export function dashboardApp(): AlpineComponent<DashboardAppData> {
     summary: null,
     loading: true,
     error: "",
+    requestId: 0,
 
     get recentBuckets(): Bucket[] {
       if (!this.summary) return [];
@@ -58,15 +63,19 @@ export function dashboardApp(): AlpineComponent<DashboardAppData> {
     },
 
     async load(): Promise<void> {
+      const thisRequest = ++this.requestId;
       this.error = "";
       try {
         const response = await fetch(`/metrics/summary?minutes=${this.windowMinutes}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        this.summary = (await response.json()) as Summary;
+        const data = (await response.json()) as Summary;
+        if (thisRequest !== this.requestId) return; // superseded by a later load()
+        this.summary = data;
       } catch (err) {
+        if (thisRequest !== this.requestId) return;
         this.error = err instanceof Error ? err.message : "Failed to load metrics";
       } finally {
-        this.loading = false;
+        if (thisRequest === this.requestId) this.loading = false;
       }
     },
   };

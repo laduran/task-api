@@ -157,10 +157,12 @@ def test_metrics_summary_counts_requests_by_status_class(client):
     assert summary["total_errors"] == 1
     assert summary["error_rate"] == pytest.approx(1 / 3, abs=1e-4)
 
-    bucket = summary["buckets"][0]
-    assert bucket["count"] == 3
-    assert bucket["errors"] == 1
-    assert bucket["avg_duration_ms"] >= 0
+    # Summed across buckets, not indexed by buckets[0]: the 3 requests could
+    # straddle a minute boundary and land in two buckets, depending on when
+    # the test happens to run.
+    assert sum(b["count"] for b in summary["buckets"]) == 3
+    assert sum(b["errors"] for b in summary["buckets"]) == 1
+    assert all(b["avg_duration_ms"] >= 0 for b in summary["buckets"])
 
 
 def test_metrics_summary_excludes_health_checks_and_itself(client):

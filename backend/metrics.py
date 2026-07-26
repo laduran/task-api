@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import Flask, g, request
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -29,6 +29,12 @@ from models import RequestMetric
 _EXCLUDED_PATHS = {"/healthz", "/readyz", "/metrics/summary"}
 
 _MAX_WINDOW_MINUTES = 24 * 60
+
+# Recording runs synchronously in after_request, on the critical path of
+# every response. A hung connection or a stalled statement would otherwise
+# block that response indefinitely; this bounds it to the same transaction
+# only, via SET LOCAL, so it can't affect any query outside _upsert.
+_WRITE_TIMEOUT = "SET LOCAL statement_timeout = '2000ms'"
 
 
 def _status_class(status_code: int) -> str:
@@ -64,6 +70,7 @@ def init_app(app: Flask) -> None:
 
 def _upsert(minute: datetime, status_class: str, duration_ms: int) -> None:
     session = db.session()
+    session.execute(text(_WRITE_TIMEOUT))
     insert_stmt = insert(RequestMetric).values(
         minute=minute,
         status_class=status_class,
