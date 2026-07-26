@@ -33,13 +33,17 @@ WORKDIR /app
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt gunicorn
 
-COPY backend/ ./backend/
-COPY --from=frontend /build/static/ ./static/
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+# Create the user before copying, so ownership can be set by COPY itself.
+# A trailing `chown -R /app` would rewrite every file's metadata, and overlayfs
+# stores that as a full second copy of the application in another layer —
+# doubling the bytes each push adds to the registry.
+RUN adduser --system --group --no-create-home appuser
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
- && adduser --system --group --no-create-home appuser \
- && chown -R appuser:appuser /app
+COPY --chown=appuser:appuser backend/ ./backend/
+COPY --from=frontend --chown=appuser:appuser /build/static/ ./static/
+# The file is mode 755 in git, and COPY preserves it — no chmod layer needed.
+# (--chmod= would require BuildKit, which the classic local builder lacks.)
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 USER appuser
 
