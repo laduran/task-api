@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Task API — Alpine demo</title>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<!-- Alpine and the taskApp component are bundled together by frontend/. -->
+<script defer src="/static/js/app.js"></script>
 <style>
   :root {
     --bg: #f6f7f9; --panel: #fff; --text: #1c2024; --muted: #6b7280;
@@ -73,7 +74,8 @@
 </style>
 </head>
 <body>
-<div class="wrap" x-data="taskApp()" x-init="init()" x-cloak>
+<!-- init() is called automatically by Alpine; no x-init needed. -->
+<div class="wrap" x-data="taskApp" x-cloak>
 
   <h1>Task API</h1>
   <p class="sub">Alpine.js front end for the Flask <code>/tasks</code> API. See
@@ -86,7 +88,7 @@
     </form>
 
     <div class="filters">
-      <template x-for="f in ['all', 'active', 'done']" :key="f">
+      <template x-for="f in filters" :key="f">
         <button @click="filter = f" :aria-pressed="filter === f" x-text="f"></button>
       </template>
       <span class="count" x-text="`${remaining} of ${tasks.length} remaining`"></span>
@@ -151,154 +153,5 @@
   </div>
 </div>
 
-<script>
-function taskApp() {
-  return {
-    tasks: [],
-    newTitle: '',
-    filter: 'all',
-    editingId: null,
-    editTitle: '',
-    error: '',
-    loading: true,
-    busy: false,
-    pending: [],   // ids with an in-flight request
-    log: [],
-
-    async init() {
-      await this.load();
-    },
-
-    // --- derived state (no network) -------------------------------------
-    get visible() {
-      if (this.filter === 'active') return this.tasks.filter(t => !t.finished);
-      if (this.filter === 'done') return this.tasks.filter(t => t.finished);
-      return this.tasks;
-    },
-    get remaining() {
-      return this.tasks.filter(t => !t.finished).length;
-    },
-
-    // --- thin API client -------------------------------------------------
-    async api(method, url, body) {
-      const opts = { method, headers: {} };
-      if (body !== undefined) {
-        opts.headers['Content-Type'] = 'application/json';
-        opts.body = JSON.stringify(body);
-      }
-      const res = await fetch(url, opts);
-      const data = res.status === 204 ? null : await res.json().catch(() => null);
-
-      this.log.unshift({ method, url, status: res.status, ok: res.ok });
-      this.log = this.log.slice(0, 8);
-
-      if (!res.ok) throw new Error(this.describe(data, res.status));
-      return data;
-    },
-
-    /** Turn the API's error payload into something readable.
-     *  Shape: {code, status, message, errors: {json: {field: [msg, ...]}}} */
-    describe(data, status) {
-      if (!data) return `HTTP ${status}`;
-      const fields = data.errors && data.errors.json;
-      if (fields) {
-        return Object.entries(fields)
-          .map(([field, msgs]) => {
-            const text = [].concat(msgs).join(', ');
-            return field === '_schema' ? text : `${field}: ${text}`;
-          })
-          .join('; ');
-      }
-      return data.message || data.status || `HTTP ${status}`;
-    },
-
-    // --- operations ------------------------------------------------------
-    async load() {
-      this.loading = true;
-      try {
-        this.tasks = await this.api('GET', '/tasks');
-      } catch (e) {
-        this.error = e.message;
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async add() {
-      const title = this.newTitle.trim();
-      if (!title) return;
-      this.busy = true;
-      try {
-        const task = await this.api('POST', '/tasks', { title });
-        this.tasks.push(task);
-        this.newTitle = '';
-        this.error = '';
-      } catch (e) {
-        this.error = e.message;
-      } finally {
-        this.busy = false;
-      }
-    },
-
-    // Optimistic: flip immediately, roll back if the server disagrees.
-    async toggle(task) {
-      const previous = task.finished;
-      task.finished = !previous;
-      this.pending.push(task.id);
-      try {
-        const updated = await this.api('PUT', `/tasks/${task.id}`, { finished: task.finished });
-        Object.assign(task, updated);
-        this.error = '';
-      } catch (e) {
-        task.finished = previous;
-        this.error = e.message;
-      } finally {
-        this.pending = this.pending.filter(id => id !== task.id);
-      }
-    },
-
-    // Entering edit mode is pure client state — no request at all.
-    startEdit(task) {
-      this.editingId = task.id;
-      this.editTitle = task.title;
-      this.$nextTick(() => this.$refs.edit && this.$refs.edit.focus());
-    },
-
-    async saveEdit(task) {
-      if (this.editingId !== task.id) return;
-      const title = this.editTitle.trim();
-      this.editingId = null;
-
-      if (!title || title === task.title) return;   // nothing to send
-
-      const previous = task.title;
-      task.title = title;                            // optimistic
-      this.pending.push(task.id);
-      try {
-        const updated = await this.api('PUT', `/tasks/${task.id}`, { title });
-        Object.assign(task, updated);
-        this.error = '';
-      } catch (e) {
-        task.title = previous;
-        this.error = e.message;
-      } finally {
-        this.pending = this.pending.filter(id => id !== task.id);
-      }
-    },
-
-    async remove(task) {
-      const index = this.tasks.indexOf(task);
-      this.tasks.splice(index, 1);                   // optimistic
-      try {
-        await this.api('DELETE', `/tasks/${task.id}`);
-        this.error = '';
-      } catch (e) {
-        this.tasks.splice(index, 0, task);           // put it back
-        this.error = e.message;
-      }
-    },
-  };
-}
-</script>
 </body>
 </html>

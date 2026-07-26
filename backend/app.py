@@ -16,7 +16,10 @@ from flask.views import MethodView
 from flask_smorest import Api, Blueprint, abort
 from marshmallow import Schema, ValidationError, fields, validate, validates_schema
 
-app = Flask(__name__)
+# static/ lives at the project root, not under backend/: it is the handoff
+# point between the two halves — the frontend build writes into it and the
+# backend serves from it.
+app = Flask(__name__, static_folder="../static", static_url_path="/static")
 
 app.config["API_TITLE"] = "Task API"
 app.config["API_VERSION"] = "1.0.0"
