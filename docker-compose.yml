@@ -1,0 +1,31 @@
+# Local development database.
+#
+# These credentials are deliberately trivial and are for local use only —
+# production supplies DATABASE_URL from the platform's secret store.
+#
+#   docker compose up -d      start Postgres in the background
+#   docker compose down       stop it (data survives)
+#   docker compose down -v    stop it and delete the data volume
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: taskapi-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taskapi
+      POSTGRES_PASSWORD: taskapi
+      POSTGRES_DB: taskapi
+    ports:
+      # Bound to localhost only, so the database is not exposed on the network.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskapi -d taskapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

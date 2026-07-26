@@ -14,7 +14,7 @@
       "get": {
         "responses": {
           "200": {
-            "description": "Every task currently stored in memory.",
+            "description": "Every stored task.",
             "content": {
               "application/json": {
                 "schema": {
@@ -31,6 +31,7 @@
           }
         },
         "summary": "List tasks",
+        "description": "The ordering is explicit on purpose: Postgres makes no guarantee about\nrow order without ORDER BY, and an UPDATE can relocate a row.",
         "tags": [
           "tasks"
         ],

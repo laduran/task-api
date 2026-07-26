@@ -2,6 +2,11 @@ Flask>=3.0.0
 flask-smorest>=0.44.0
 marshmallow>=4.0.0
 
+# Persistence
+SQLAlchemy>=2.0.0
+alembic>=1.13.0
+psycopg[binary]>=3.2.0
+
 # Test / dev
 pytest>=8.0.0
 openapi-spec-validator>=0.7.0

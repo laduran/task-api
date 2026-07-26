@@ -15,8 +15,14 @@ lightweight hypermedia-style front ends against heavyweight SPA frameworks.
 ```
 exercise1/
 ├── README.md
+├── docker-compose.yml  local Postgres
 ├── backend/            Flask API
-│   ├── app.py            routes, schemas, OpenAPI config
+│   ├── app.py            application factory, OpenAPI config
+│   ├── views.py          routes (the Blueprint the spec is generated from)
+│   ├── schemas.py        marshmallow schemas
+│   ├── models.py         SQLAlchemy models
+│   ├── db.py             engine + per-request session
+│   ├── alembic/          migrations
 │   ├── openapi.json      generated — do not edit by hand
 │   ├── requirements.txt
 │   └── tests/
@@ -38,11 +44,22 @@ writes into it, the backend serves from it.
 
 ## Build and run
 
+### Database
+
+Postgres runs in a container; nothing needs to be installed on the host
+(`psycopg[binary]` bundles libpq).
+
+```bash
+docker compose up -d       # starts Postgres on 127.0.0.1:5432
+docker compose ps          # wait for "healthy"
+```
+
 ### Backend
 
 ```bash
 python -m venv backend/.venv
 backend/.venv/bin/pip install -r backend/requirements.txt
+cd backend && .venv/bin/alembic upgrade head    # create the schema
 ```
 
 ### Frontend
@@ -84,6 +101,28 @@ committed copy is stale:
 cd backend && .venv/bin/python app.py --dump-openapi
 ```
 
+### Migrations
+
+```bash
+cd backend
+.venv/bin/alembic revision --autogenerate -m "what changed"
+.venv/bin/alembic upgrade head
+.venv/bin/alembic downgrade -1      # undo the last one
+```
+
+The connection string comes from `DATABASE_URL` and is never committed;
+`alembic.ini` deliberately leaves `sqlalchemy.url` blank and `env.py` falls
+back to the environment. The default is the local compose database.
+
+Tests run against a **separate** `taskapi_test` database (override with
+`TEST_DATABASE_URL`) and apply the real migrations rather than
+`create_all`, so a broken migration fails the suite instead of reaching
+production. Create it once with:
+
+```bash
+docker compose exec db createdb -U taskapi taskapi_test
+```
+
 ## The API
 
 Base URL `/`. Every response is JSON, including errors.
@@ -112,7 +151,9 @@ with per-field detail:
 }
 ```
 
-Tasks are held in memory, so **all state is lost when the server restarts**.
+Tasks are stored in Postgres. `GET /tasks` orders by `id` explicitly —
+Postgres guarantees no row order without `ORDER BY`, and an `UPDATE` can
+relocate a row.
 
 ## Notes
 
