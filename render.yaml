@@ -1,0 +1,35 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Render builds the Dockerfile from this repo on every push to main, so no
+# image is pulled from a registry and GHCR data transfer stays at zero.
+# GHCR remains the archive CI publishes for rollback and local debugging.
+
+services:
+  - type: web
+    name: task-api
+    runtime: docker
+    plan: free
+    region: oregon
+
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # No dockerTarget needed: the Dockerfile's last stage is the `production`
+    # alias, so the default build target is already correct.
+
+    # Liveness only — deliberately does not touch the database, so a Postgres
+    # blip does not make Render restart the service.
+    healthCheckPath: /healthz
+
+    autoDeploy: true
+
+    envVars:
+      # Set in the Render dashboard, never committed. Use Neon's *direct*
+      # (non-pooled) connection string, with the scheme rewritten:
+      #   postgresql://...        ->  postgresql+psycopg://...
+      # and keep ?sslmode=require — Neon requires TLS.
+      - key: DATABASE_URL
+        sync: false
+
+      # The free instance has 512 MB RAM; two sync workers fit comfortably.
+      - key: WEB_CONCURRENCY
+        value: 2
