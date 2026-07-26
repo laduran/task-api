@@ -26,6 +26,7 @@ exercise1/
 │   ├── models.py         SQLAlchemy models
 │   ├── db.py             engine + per-request session
 │   ├── alembic/          migrations
+│   ├── alembic.ini       migration config (holds no connection string)
 │   ├── gunicorn.conf.py  production server settings
 │   ├── openapi.json      generated — do not edit by hand
 │   ├── requirements.txt
@@ -54,8 +55,19 @@ Postgres runs in a container; nothing needs to be installed on the host
 (`psycopg[binary]` bundles libpq).
 
 ```bash
-docker compose up -d       # starts Postgres on 127.0.0.1:5432
+docker compose up -d db    # just the database, on 127.0.0.1:5432
 docker compose ps          # wait for "healthy"
+```
+
+Note the explicit `db`: a bare `docker compose up -d` starts the API container
+as well, which is what you want for [running in a
+container](#running-in-a-container) but not while developing against the
+locally installed backend.
+
+The test suite needs a second database, created once:
+
+```bash
+docker compose exec db createdb -U taskapi taskapi_test
 ```
 
 ### Backend
@@ -139,6 +151,10 @@ cd frontend && npm run typecheck  # tsc --noEmit, no bundling
 cd backend  && .venv/bin/python -m pytest tests/ -q
 ```
 
+The tests hit a real Postgres, so `docker compose up -d db` must be running
+and `taskapi_test` must exist (see [Database](#database)) — otherwise the
+suite fails at the migration step with a connection error.
+
 Regenerate the spec after changing any route or schema — a test fails if the
 committed copy is stale:
 
@@ -160,13 +176,8 @@ The connection string comes from `DATABASE_URL` and is never committed;
 back to the environment. The default is the local compose database.
 
 Tests run against a **separate** `taskapi_test` database (override with
-`TEST_DATABASE_URL`) and apply the real migrations rather than
-`create_all`, so a broken migration fails the suite instead of reaching
-production. Create it once with:
-
-```bash
-docker compose exec db createdb -U taskapi taskapi_test
-```
+`TEST_DATABASE_URL`) and apply the real migrations rather than `create_all`,
+so a broken migration fails the suite instead of reaching production.
 
 ## The API
 
@@ -210,6 +221,6 @@ match what the app generates.
 
 flask-smorest only sees routes registered on a Blueprint, so a bare
 `@app.route` would be invisible to the generator. That is the one remaining
-drift vector, and `test_every_route_is_documented` catches it — pages that are
-deliberately undocumented (`/`, static assets, the docs endpoints) are listed
-in `UNDOCUMENTED_ENDPOINTS`.
+drift vector, and `test_every_route_is_documented` catches it — routes that are
+deliberately undocumented (`/`, `/healthz`, `/readyz`, static assets, and the
+docs endpoints themselves) are listed in `UNDOCUMENTED_ENDPOINTS`.
