@@ -1,0 +1,59 @@
+/* Shared theme and base styles for every page. Themes are user-selected only
+   — the system preference is deliberately not consulted, so the toggle in
+   theme.ts is the single source of truth. Loaded by both index.html and
+   dashboard.html; keep this the only place these rules are defined; a copy
+   in each page is exactly what caused the last dark-mode contrast bug. */
+
+/* --accent is tuned as a TEXT colour against --bg (links, outlines,
+   borders). --accent-fill is a separate token for FILLED controls with
+   white text (button.primary, selected filter), since one color can't
+   hit AA contrast in both roles against a dark background:
+     #60a5fa vs --bg (dark):        7.08:1  (accent, as text)
+     white on #60a5fa (dark):       2.54:1  (fails, hence accent-fill)
+     white on #2563eb (accent-fill): 5.17:1  (passes) */
+:root, :root[data-theme="light"] {
+  --bg: #f6f7f9; --panel: #fff; --text: #1c2024; --muted: #6b7280;
+  --line: #e3e6ea; --accent: #2563eb; --accent-fill: #2563eb;
+  --danger: #dc2626; --ok: #16a34a;
+}
+:root[data-theme="dark"] {
+  --bg: #14171a; --panel: #1c2024; --text: #e8eaed; --muted: #9aa3ad;
+  --line: #2c3238; --accent: #60a5fa; --accent-fill: #2563eb;
+  --danger: #f87171; --ok: #4ade80;
+}
+body { transition: background-color .15s ease, color .15s ease; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 1rem; background: var(--bg); color: var(--text);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 640px; margin: 0 auto; }
+.head { display: flex; align-items: flex-start; gap: 1rem; }
+.head h1 { flex: 1; }
+h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+.theme-toggle {
+  flex: none; width: 2.25rem; height: 2.25rem; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; line-height: 1; border-radius: 50%;
+}
+.sub { color: var(--muted); font-size: .875rem; margin-bottom: 1.5rem; }
+/* Without this, links fall back to the browser's default dark blue, which
+   is effectively unreadable against the dark theme's background. */
+a { color: var(--accent); }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden;
+}
+input[type=text], select {
+  padding: .55rem .7rem; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg); color: var(--text); font: inherit;
+}
+input[type=text]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button {
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  border-radius: 6px; padding: .55rem .9rem; font: inherit; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
+[x-cloak] { display: none !important; }

@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Flask
+from flask import Flask, request
 from flask_smorest import Api
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 import db
+import metrics
 from views import blp
 
 
@@ -48,6 +49,7 @@ def create_app(database_url: str | None = None) -> Flask:
     }
 
     db.init_app(app, database_url)
+    metrics.init_app(app)
 
     api = Api(app)
     api.register_blueprint(blp)
@@ -67,6 +69,25 @@ def create_app(database_url: str | None = None) -> Flask:
         in the tests).
         """
         return app.send_static_file("index.html")
+
+    @app.route("/dashboard")
+    def dashboard() -> Any:
+        """Serve the basic golden-signal metrics dashboard.
+
+        Deliberately outside the Blueprint, like ``index`` above — a page,
+        not part of the API surface.
+        """
+        return app.send_static_file("dashboard.html")
+
+    @app.get("/metrics/summary")
+    def metrics_summary() -> Any:
+        """Aggregated request counts and latency for the dashboard.
+
+        Deliberately outside the API Blueprint, like /healthz and /readyz —
+        this is operational data about the service, not the public Task API.
+        """
+        minutes = request.args.get("minutes", default=60, type=int) or 60
+        return metrics.summary(minutes)
 
     @app.get("/healthz")
     def healthz() -> Any:
