@@ -62,7 +62,11 @@ def current_user() -> User | None:
 
 def _login() -> Any:
     redirect_uri = url_for("auth_callback", _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
+    # Without this, Google silently reuses whatever Google account is already
+    # signed in in the browser and skips the chooser — logging out of this
+    # app and back in always re-authenticates as the same Google account,
+    # with no way to pick a different one.
+    return oauth.google.authorize_redirect(redirect_uri, prompt="select_account")
 
 
 def _callback() -> Any:
