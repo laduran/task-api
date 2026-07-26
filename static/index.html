@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Task API — Alpine demo</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <!-- Alpine and the taskApp component are bundled together by frontend/. -->
 <script defer src="/static/js/app.js"></script>
 <!-- Applies the saved theme before first paint. This has to be inline and
@@ -43,14 +44,42 @@
   .status.ok { color: var(--ok); }
   .status.bad { color: var(--danger); }
   [x-cloak] { display: none !important; }
+
+  .account { display: flex; align-items: center; gap: .5rem; font-size: .85rem; }
+  .account form { display: contents; }
+  .avatar { width: 1.6rem; height: 1.6rem; border-radius: 50%; }
+  a.button-like { display: inline-block; }
+  a.button-like, button.linklike {
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    border-radius: 6px; padding: .4rem .75rem; font: inherit; font-size: .8rem;
+    cursor: pointer; text-decoration: none;
+  }
+  a.button-like:hover, button.linklike:hover { border-color: var(--accent); }
+  .signin { padding: 2rem; text-align: center; color: var(--muted); }
+  .signin a.button-like { margin-top: .75rem; font-size: .9rem; padding: .55rem .9rem; }
 </style>
 </head>
 <body>
-<!-- init() is called automatically by Alpine; no x-init needed. -->
-<div class="wrap" x-data="taskApp" x-cloak>
+<!-- A bare root x-data activates Alpine on this whole subtree; the account
+     header only needs the global $store.auth/$store.theme, not a component
+     of its own. taskApp mounts as its own nested x-data, further down,
+     only once $store.auth confirms a signed-in user. -->
+<div class="wrap" x-data x-cloak>
 
   <div class="head">
     <h1>Task API</h1>
+    <div class="account" x-show="!$store.auth.loading">
+      <template x-if="$store.auth.authenticated">
+        <form method="post" action="/auth/logout">
+          <img class="avatar" :src="$store.auth.pictureUrl" x-show="$store.auth.pictureUrl" alt="">
+          <span x-text="$store.auth.name"></span>
+          <button type="submit" class="linklike">Sign out</button>
+        </form>
+      </template>
+      <template x-if="!$store.auth.authenticated">
+        <a class="button-like" href="/auth/login">Sign in with Google</a>
+      </template>
+    </div>
     <button class="theme-toggle" type="button"
             @click="$store.theme.toggle()"
             :aria-label="$store.theme.label"
@@ -61,76 +90,93 @@
     <a href="/docs">/docs</a> for the generated OpenAPI spec, or the
     <a href="/dashboard">request dashboard</a> for basic golden-signal metrics.</p>
 
-  <div class="panel">
-    <form class="add" @submit.prevent="add()">
-      <input type="text" x-model="newTitle" placeholder="What needs doing?" :disabled="busy">
-      <button class="primary" type="submit" :disabled="busy || !newTitle.trim()">Add</button>
-    </form>
-
-    <div class="filters">
-      <template x-for="f in filters" :key="f">
-        <button @click="filter = f" :aria-pressed="filter === f" x-text="f"></button>
-      </template>
-      <span class="count" x-text="`${remaining} of ${tasks.length} remaining`"></span>
+  <template x-if="!$store.auth.loading && !$store.auth.authenticated">
+    <div class="panel signin">
+      <p>Sign in to see your tasks.</p>
+      <a class="button-like" href="/auth/login">Sign in with Google</a>
     </div>
-
-    <template x-if="loading">
-      <div class="empty">Loading…</div>
-    </template>
-
-    <template x-if="!loading && visible.length === 0">
-      <div class="empty" x-text="tasks.length ? `No ${filter} tasks.` : 'No tasks yet — add one above.'"></div>
-    </template>
-
-    <ul>
-      <template x-for="task in visible" :key="task.id">
-        <li :class="{ pending: pending.includes(task.id) }">
-          <span class="id" x-text="`#${task.id}`"></span>
-
-          <input type="checkbox" :checked="task.finished" @change="toggle(task)"
-                 :aria-label="`Mark ${task.title} as done`">
-
-          <!-- display mode -->
-          <span class="title" :class="{ done: task.finished }"
-                x-show="editingId !== task.id"
-                @dblclick="startEdit(task)"
-                x-text="task.title"
-                title="Double-click to edit"></span>
-
-          <!-- edit mode: no request, purely client state -->
-          <input class="title" type="text" x-show="editingId === task.id" x-ref="edit"
-                 x-model="editTitle"
-                 @keydown.enter="saveEdit(task)"
-                 @keydown.escape="editingId = null"
-                 @blur="saveEdit(task)">
-
-          <button class="icon" @click="startEdit(task)" x-show="editingId !== task.id"
-                  :aria-label="`Edit ${task.title}`">edit</button>
-          <button class="icon" @click="remove(task)" :aria-label="`Delete ${task.title}`">✕</button>
-        </li>
-      </template>
-    </ul>
-  </div>
-
-  <template x-if="error">
-    <p class="error">
-      <span x-text="error"></span>
-      <button @click="error = ''" aria-label="Dismiss">✕</button>
-    </p>
   </template>
 
-  <div class="log" x-show="log.length">
-    <h2>Request log</h2>
-    <ol class="panel">
-      <template x-for="(entry, i) in log" :key="i">
-        <li>
-          <span class="method" x-text="entry.method"></span>
-          <span x-text="entry.url"></span>
-          <span class="status" :class="entry.ok ? 'ok' : 'bad'" x-text="entry.status"></span>
-        </li>
+  <!-- init() is called automatically by Alpine; no x-init needed. Nested
+       inside this x-if so taskApp.init()'s GET /tasks genuinely never fires
+       for a signed-out visitor — it would otherwise 401 on every anonymous
+       page view, and that 401 would count against the metrics dashboard's
+       error rate for a "failure" that isn't really one. -->
+  <template x-if="$store.auth.authenticated">
+    <div x-data="taskApp">
+
+      <div class="panel">
+        <form class="add" @submit.prevent="add()">
+          <input type="text" x-model="newTitle" placeholder="What needs doing?" :disabled="busy">
+          <button class="primary" type="submit" :disabled="busy || !newTitle.trim()">Add</button>
+        </form>
+
+        <div class="filters">
+          <template x-for="f in filters" :key="f">
+            <button @click="filter = f" :aria-pressed="filter === f" x-text="f"></button>
+          </template>
+          <span class="count" x-text="`${remaining} of ${tasks.length} remaining`"></span>
+        </div>
+
+        <template x-if="loading">
+          <div class="empty">Loading…</div>
+        </template>
+
+        <template x-if="!loading && visible.length === 0">
+          <div class="empty" x-text="tasks.length ? `No ${filter} tasks.` : 'No tasks yet — add one above.'"></div>
+        </template>
+
+        <ul>
+          <template x-for="task in visible" :key="task.id">
+            <li :class="{ pending: pending.includes(task.id) }">
+              <span class="id" x-text="`#${task.id}`"></span>
+
+              <input type="checkbox" :checked="task.finished" @change="toggle(task)"
+                     :aria-label="`Mark ${task.title} as done`">
+
+              <!-- display mode -->
+              <span class="title" :class="{ done: task.finished }"
+                    x-show="editingId !== task.id"
+                    @dblclick="startEdit(task)"
+                    x-text="task.title"
+                    title="Double-click to edit"></span>
+
+              <!-- edit mode: no request, purely client state -->
+              <input class="title" type="text" x-show="editingId === task.id" x-ref="edit"
+                     x-model="editTitle"
+                     @keydown.enter="saveEdit(task)"
+                     @keydown.escape="editingId = null"
+                     @blur="saveEdit(task)">
+
+              <button class="icon" @click="startEdit(task)" x-show="editingId !== task.id"
+                      :aria-label="`Edit ${task.title}`">edit</button>
+              <button class="icon" @click="remove(task)" :aria-label="`Delete ${task.title}`">✕</button>
+            </li>
+          </template>
+        </ul>
+      </div>
+
+      <template x-if="error">
+        <p class="error">
+          <span x-text="error"></span>
+          <button @click="error = ''" aria-label="Dismiss">✕</button>
+        </p>
       </template>
-    </ol>
-  </div>
+
+      <div class="log" x-show="log.length">
+        <h2>Request log</h2>
+        <ol class="panel">
+          <template x-for="(entry, i) in log" :key="i">
+            <li>
+              <span class="method" x-text="entry.method"></span>
+              <span x-text="entry.url"></span>
+              <span class="status" :class="entry.ok ? 'ok' : 'bad'" x-text="entry.status"></span>
+            </li>
+          </template>
+        </ol>
+      </div>
+    </div>
+  </template>
 </div>
 
 </body>

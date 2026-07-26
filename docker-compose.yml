@@ -45,6 +45,17 @@ services:
       # `db` is the compose service name, resolved on the internal network.
       DATABASE_URL: postgresql+psycopg://taskapi:taskapi@db:5432/taskapi
       WEB_CONCURRENCY: 2
+      # Plain http locally; Secure cookies would never be sent back by the
+      # browser and login would silently appear broken.
+      SESSION_COOKIE_SECURE: "false"
+      # Pulled from a local, gitignored .env file if you want to actually
+      # exercise Google login against this container. Note: Google Cloud
+      # Console has http://127.0.0.1:5000/auth/google/callback registered
+      # (the `python app.py` dev server), not :8000 — add the :8000 callback
+      # too if you want login to work through this container specifically.
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-not-for-production}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-dev-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-dev-client-secret}
     ports:
       - "127.0.0.1:8000:8000"
 

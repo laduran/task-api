@@ -1,5 +1,6 @@
 import Alpine from "alpinejs";
 
+import { createAuthStore } from "./authStore";
 import { taskApp } from "./taskApp";
 import { createThemeStore } from "./theme";
 
@@ -15,6 +16,7 @@ window.Alpine = Alpine;
 // A store rather than component state: the toggle lives outside the task
 // component, and Alpine calls init() on stores automatically.
 Alpine.store("theme", createThemeStore());
+Alpine.store("auth", createAuthStore());
 
 Alpine.data("taskApp", taskApp);
 Alpine.start();

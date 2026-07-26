@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,9 @@ from sqlalchemy import text
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
+import db  # noqa: E402
 from app import create_app  # noqa: E402
+from models import User  # noqa: E402
 
 # A separate database so that running the suite never touches dev data.
 TEST_DATABASE_URL = os.environ.get(
@@ -44,18 +47,67 @@ def clean_tables(app):
 
     request_metrics is truncated too: every test request runs through the
     real after_request hook, so leftover counts from an earlier test would
-    otherwise leak into whichever test checks /metrics/summary.
+    otherwise leak into whichever test checks /metrics/summary. users is
+    truncated in the same statement as tasks (which references it via
+    owner_id) so Postgres handles the FK ordering in one go.
     """
     with app.extensions["engine"].begin() as connection:
-        connection.execute(text("TRUNCATE tasks RESTART IDENTITY CASCADE"))
+        connection.execute(text("TRUNCATE tasks, users RESTART IDENTITY CASCADE"))
         connection.execute(text("TRUNCATE request_metrics"))
     yield
 
 
+def _create_user(app, *, google_sub: str, email: str) -> int:
+    """Insert a user directly, bypassing the real Google OAuth handshake.
+
+    Exercising /auth/login or /auth/google/callback in tests would require a
+    live network call to Google's OIDC metadata endpoint (Authlib fetches it
+    lazily, only when those routes actually run) — not something the test
+    suite should depend on. Everything reachable without that network call —
+    the upsert logic, the login-required gate, session handling — is tested
+    directly instead; the real handshake is verified once by hand in a
+    browser, against real Google credentials.
+    """
+    with app.app_context():
+        session = db.session()
+        user = User(
+            google_sub=google_sub,
+            email=email,
+            name=f"Test User ({email})",
+            picture_url=None,
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(user)
+        session.commit()
+        return user.id
+
+
 @pytest.fixture()
-def client(app):
-    with app.test_client() as client:
-        yield client
+def user_id(app, clean_tables):
+    return _create_user(app, google_sub="test-sub-1", email="test1@example.com")
+
+
+@pytest.fixture()
+def client(app, user_id):
+    """A signed-in test client — what most tests want, since /tasks now
+    requires a session. Tests of the auth boundary itself use anon_client.
+
+    Deliberately not `with app.test_client() as client: yield client`: two
+    such context-managed clients coexisting in one test (several auth tests
+    need exactly that, to compare a signed-in and an anonymous view) corrupts
+    Flask's request-context stack on teardown. The plain form doesn't have
+    that failure mode, and session_transaction() works fine without it.
+    """
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user_id
+    return client
+
+
+@pytest.fixture()
+def anon_client(app, clean_tables):
+    """A test client with no session at all."""
+    return app.test_client()
 
 
 # --- behaviour -------------------------------------------------------------
@@ -144,6 +196,90 @@ def test_readiness_reports_503_when_the_database_is_unreachable(app):
         assert client.get("/readyz").status_code == 503
 
 
+# --- auth --------------------------------------------------------------------
+
+
+def test_tasks_require_login(anon_client):
+    assert anon_client.get("/tasks").status_code == 401
+    assert anon_client.post("/tasks", json={"title": "x"}).status_code == 401
+    assert anon_client.get("/tasks/1").status_code == 401
+    assert anon_client.put("/tasks/1", json={"finished": True}).status_code == 401
+    assert anon_client.delete("/tasks/1").status_code == 401
+
+    # Still a proper JSON error, not a bare redirect or an HTML page.
+    response = anon_client.get("/tasks")
+    assert response.is_json
+    assert "message" in response.get_json()
+
+
+def test_public_endpoints_do_not_require_login(anon_client):
+    """The auth gate is scoped to the tasks Blueprint, not the whole app."""
+    for path in (
+        "/", "/dashboard", "/healthz", "/readyz", "/metrics/summary", "/auth/me", "/favicon.ico",
+    ):
+        assert anon_client.get(path).status_code == 200, path
+
+
+def test_auth_me_reports_signed_in_state(client, anon_client):
+    assert anon_client.get("/auth/me").get_json() == {"authenticated": False}
+
+    me = client.get("/auth/me").get_json()
+    assert me["authenticated"] is True
+    assert me["email"] == "test1@example.com"
+    assert me["name"]
+
+
+def test_logout_clears_the_session(client):
+    assert client.get("/tasks").status_code == 200
+    # A plain <form method=post> target, so it redirects rather than
+    # returning JSON — no fetch() needed on the frontend.
+    logout = client.post("/auth/logout")
+    assert logout.status_code == 302
+    assert logout.location == "/"
+    assert client.get("/tasks").status_code == 401
+
+
+def test_tasks_are_isolated_between_users(app, client):
+    """A task belonging to another user is invisible, not merely forbidden."""
+    created = client.post("/tasks", json={"title": "mine"}).get_json()
+
+    other_user_id = _create_user(app, google_sub="test-sub-2", email="test2@example.com")
+    other_client = app.test_client()
+    with other_client.session_transaction() as sess:
+        sess["user_id"] = other_user_id
+
+    assert other_client.get("/tasks").get_json() == []
+    # 404, not 403 — a 403 would confirm the id belongs to *someone*.
+    assert other_client.get(f"/tasks/{created['id']}").status_code == 404
+    assert other_client.put(f"/tasks/{created['id']}", json={"finished": True}).status_code == 404
+    assert other_client.delete(f"/tasks/{created['id']}").status_code == 404
+
+    # Untouched from the owner's side.
+    assert client.get(f"/tasks/{created['id']}").status_code == 200
+
+
+def test_upsert_user_creates_then_updates_on_second_login(app):
+    """The second login for the same Google account updates the row in place
+    rather than creating a duplicate — this is the actual logic behind the
+    OAuth callback, tested directly since the callback itself needs a live
+    network call to Google to exercise end-to-end."""
+    import auth
+
+    with app.app_context():
+        first = auth._upsert_user(
+            {"sub": "stable-id", "email": "old@example.com", "name": "Old Name"}
+        )
+        assert first.email == "old@example.com"
+
+        second = auth._upsert_user(
+            {"sub": "stable-id", "email": "new@example.com", "name": "New Name", "picture": "http://x/p.png"}
+        )
+        assert second.id == first.id
+        assert second.email == "new@example.com"
+        assert second.name == "New Name"
+        assert second.picture_url == "http://x/p.png"
+
+
 # --- request metrics --------------------------------------------------------
 
 
@@ -230,9 +366,14 @@ UNDOCUMENTED_ENDPOINTS = {
     "static",
     "index",
     "dashboard",
+    "favicon",
     "healthz",
     "readyz",
     "metrics_summary",
+    "auth_login",
+    "auth_callback",
+    "auth_logout",
+    "auth_me",
     "api-docs.openapi_json",
     "api-docs.openapi_swagger_ui",
 }
