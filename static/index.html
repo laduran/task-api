@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task API — Alpine demo</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1c2024; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #2563eb; --danger: #dc2626; --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171a; --panel: #1c2024; --text: #e8eaed; --muted: #9aa3ad;
+      --line: #2c3238; --accent: #60a5fa; --danger: #f87171; --ok: #4ade80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem; background: var(--bg); color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  .sub { color: var(--muted); font-size: .875rem; margin-bottom: 1.5rem; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden;
+  }
+  form.add { display: flex; gap: .5rem; padding: .75rem; border-bottom: 1px solid var(--line); }
+  input[type=text] {
+    flex: 1; padding: .55rem .7rem; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--text); font: inherit;
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    border-radius: 6px; padding: .55rem .9rem; font: inherit; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .filters { display: flex; gap: .35rem; padding: .6rem .75rem; border-bottom: 1px solid var(--line); align-items: center; }
+  .filters button { padding: .3rem .6rem; font-size: .8rem; }
+  .filters button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .count { margin-left: auto; color: var(--muted); font-size: .8rem; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: center; gap: .65rem; padding: .65rem .75rem; border-bottom: 1px solid var(--line); }
+  li:last-child { border-bottom: 0; }
+  li.pending { opacity: .5; }
+  .title { flex: 1; cursor: pointer; }
+  .title.done { text-decoration: line-through; color: var(--muted); }
+  .id { color: var(--muted); font-size: .72rem; font-family: ui-monospace, monospace; min-width: 1.75rem; }
+  .icon { padding: .3rem .5rem; font-size: .8rem; }
+  .empty { padding: 2rem; text-align: center; color: var(--muted); }
+  .error {
+    margin: .75rem 0 0; padding: .6rem .75rem; border-radius: 6px;
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border: 1px solid var(--danger); color: var(--danger); font-size: .85rem;
+    display: flex; gap: .5rem; align-items: flex-start;
+  }
+  .error button { margin-left: auto; border: 0; background: none; color: inherit; padding: 0 .25rem; }
+  .log { margin-top: 1.5rem; }
+  .log h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 .5rem; }
+  .log ol { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, monospace; font-size: .78rem; }
+  .log li { padding: .3rem .5rem; border-bottom: 1px solid var(--line); gap: .5rem; }
+  .method { font-weight: 600; min-width: 3.5rem; }
+  .status { margin-left: auto; }
+  .status.ok { color: var(--ok); }
+  .status.bad { color: var(--danger); }
+  [x-cloak] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap" x-data="taskApp()" x-init="init()" x-cloak>
+
+  <h1>Task API</h1>
+  <p class="sub">Alpine.js front end for the Flask <code>/tasks</code> API. See
+    <a href="/docs">/docs</a> for the generated OpenAPI spec.</p>
+
+  <div class="panel">
+    <form class="add" @submit.prevent="add()">
+      <input type="text" x-model="newTitle" placeholder="What needs doing?" :disabled="busy">
+      <button class="primary" type="submit" :disabled="busy || !newTitle.trim()">Add</button>
+    </form>
+
+    <div class="filters">
+      <template x-for="f in ['all', 'active', 'done']" :key="f">
+        <button @click="filter = f" :aria-pressed="filter === f" x-text="f"></button>
+      </template>
+      <span class="count" x-text="`${remaining} of ${tasks.length} remaining`"></span>
+    </div>
+
+    <template x-if="loading">
+      <div class="empty">Loading…</div>
+    </template>
+
+    <template x-if="!loading && visible.length === 0">
+      <div class="empty" x-text="tasks.length ? `No ${filter} tasks.` : 'No tasks yet — add one above.'"></div>
+    </template>
+
+    <ul>
+      <template x-for="task in visible" :key="task.id">
+        <li :class="{ pending: pending.includes(task.id) }">
+          <span class="id" x-text="`#${task.id}`"></span>
+
+          <input type="checkbox" :checked="task.finished" @change="toggle(task)"
+                 :aria-label="`Mark ${task.title} as done`">
+
+          <!-- display mode -->
+          <span class="title" :class="{ done: task.finished }"
+                x-show="editingId !== task.id"
+                @dblclick="startEdit(task)"
+                x-text="task.title"
+                title="Double-click to edit"></span>
+
+          <!-- edit mode: no request, purely client state -->
+          <input class="title" type="text" x-show="editingId === task.id" x-ref="edit"
+                 x-model="editTitle"
+                 @keydown.enter="saveEdit(task)"
+                 @keydown.escape="editingId = null"
+                 @blur="saveEdit(task)">
+
+          <button class="icon" @click="startEdit(task)" x-show="editingId !== task.id"
+                  :aria-label="`Edit ${task.title}`">edit</button>
+          <button class="icon" @click="remove(task)" :aria-label="`Delete ${task.title}`">✕</button>
+        </li>
+      </template>
+    </ul>
+  </div>
+
+  <template x-if="error">
+    <p class="error">
+      <span x-text="error"></span>
+      <button @click="error = ''" aria-label="Dismiss">✕</button>
+    </p>
+  </template>
+
+  <div class="log" x-show="log.length">
+    <h2>Request log</h2>
+    <ol class="panel">
+      <template x-for="(entry, i) in log" :key="i">
+        <li>
+          <span class="method" x-text="entry.method"></span>
+          <span x-text="entry.url"></span>
+          <span class="status" :class="entry.ok ? 'ok' : 'bad'" x-text="entry.status"></span>
+        </li>
+      </template>
+    </ol>
+  </div>
+</div>
+
+<script>
+function taskApp() {
+  return {
+    tasks: [],
+    newTitle: '',
+    filter: 'all',
+    editingId: null,
+    editTitle: '',
+    error: '',
+    loading: true,
+    busy: false,
+    pending: [],   // ids with an in-flight request
+    log: [],
+
+    async init() {
+      await this.load();
+    },
+
+    // --- derived state (no network) -------------------------------------
+    get visible() {
+      if (this.filter === 'active') return this.tasks.filter(t => !t.finished);
+      if (this.filter === 'done') return this.tasks.filter(t => t.finished);
+      return this.tasks;
+    },
+    get remaining() {
+      return this.tasks.filter(t => !t.finished).length;
+    },
+
+    // --- thin API client -------------------------------------------------
+    async api(method, url, body) {
+      const opts = { method, headers: {} };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      const data = res.status === 204 ? null : await res.json().catch(() => null);
+
+      this.log.unshift({ method, url, status: res.status, ok: res.ok });
+      this.log = this.log.slice(0, 8);
+
+      if (!res.ok) throw new Error(this.describe(data, res.status));
+      return data;
+    },
+
+    /** Turn the API's error payload into something readable.
+     *  Shape: {code, status, message, errors: {json: {field: [msg, ...]}}} */
+    describe(data, status) {
+      if (!data) return `HTTP ${status}`;
+      const fields = data.errors && data.errors.json;
+      if (fields) {
+        return Object.entries(fields)
+          .map(([field, msgs]) => {
+            const text = [].concat(msgs).join(', ');
+            return field === '_schema' ? text : `${field}: ${text}`;
+          })
+          .join('; ');
+      }
+      return data.message || data.status || `HTTP ${status}`;
+    },
+
+    // --- operations ------------------------------------------------------
+    async load() {
+      this.loading = true;
+      try {
+        this.tasks = await this.api('GET', '/tasks');
+      } catch (e) {
+        this.error = e.message;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async add() {
+      const title = this.newTitle.trim();
+      if (!title) return;
+      this.busy = true;
+      try {
+        const task = await this.api('POST', '/tasks', { title });
+        this.tasks.push(task);
+        this.newTitle = '';
+        this.error = '';
+      } catch (e) {
+        this.error = e.message;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // Optimistic: flip immediately, roll back if the server disagrees.
+    async toggle(task) {
+      const previous = task.finished;
+      task.finished = !previous;
+      this.pending.push(task.id);
+      try {
+        const updated = await this.api('PUT', `/tasks/${task.id}`, { finished: task.finished });
+        Object.assign(task, updated);
+        this.error = '';
+      } catch (e) {
+        task.finished = previous;
+        this.error = e.message;
+      } finally {
+        this.pending = this.pending.filter(id => id !== task.id);
+      }
+    },
+
+    // Entering edit mode is pure client state — no request at all.
+    startEdit(task) {
+      this.editingId = task.id;
+      this.editTitle = task.title;
+      this.$nextTick(() => this.$refs.edit && this.$refs.edit.focus());
+    },
+
+    async saveEdit(task) {
+      if (this.editingId !== task.id) return;
+      const title = this.editTitle.trim();
+      this.editingId = null;
+
+      if (!title || title === task.title) return;   // nothing to send
+
+      const previous = task.title;
+      task.title = title;                            // optimistic
+      this.pending.push(task.id);
+      try {
+        const updated = await this.api('PUT', `/tasks/${task.id}`, { title });
+        Object.assign(task, updated);
+        this.error = '';
+      } catch (e) {
+        task.title = previous;
+        this.error = e.message;
+      } finally {
+        this.pending = this.pending.filter(id => id !== task.id);
+      }
+    },
+
+    async remove(task) {
+      const index = this.tasks.indexOf(task);
+      this.tasks.splice(index, 1);                   // optimistic
+      try {
+        await this.api('DELETE', `/tasks/${task.id}`);
+        this.error = '';
+      } catch (e) {
+        this.tasks.splice(index, 0, task);           // put it back
+        this.error = e.message;
+      }
+    },
+  };
+}
+</script>
+</body>
+</html>

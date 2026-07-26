@@ -1,0 +1,362 @@
+{
+  "info": {
+    "title": "Task API",
+    "version": "1.0.0",
+    "description": "A simple task management API with CRUD operations."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/tasks": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Every task currently stored in memory.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Task"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List tasks",
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "listTasks"
+      },
+      "post": {
+        "responses": {
+          "422": {
+            "description": "The title is missing or blank.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The newly created task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCreate"
+              }
+            }
+          }
+        },
+        "summary": "Create a task",
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "createTask"
+      }
+    },
+    "/tasks/{task_id}": {
+      "get": {
+        "responses": {
+          "404": {
+            "description": "The task was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The requested task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Get a task",
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "getTask"
+      },
+      "put": {
+        "responses": {
+          "422": {
+            "description": "The supplied fields are invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The task was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The updated task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskUpdate"
+              }
+            }
+          }
+        },
+        "summary": "Update a task",
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "updateTask"
+      },
+      "delete": {
+        "responses": {
+          "404": {
+            "description": "The task was not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Deletion succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Delete a task",
+        "tags": [
+          "tasks"
+        ],
+        "operationId": "deleteTask"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "task_id",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      ]
+    }
+  },
+  "tags": [
+    {
+      "name": "tasks",
+      "description": "Create, read, update and delete tasks."
+    }
+  ],
+  "openapi": "3.0.3",
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "Error code"
+          },
+          "status": {
+            "type": "string",
+            "description": "Error name"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "errors": {
+            "type": "object",
+            "description": "Errors",
+            "additionalProperties": {}
+          }
+        },
+        "additionalProperties": false
+      },
+      "PaginationMetadata": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total number of items."
+          },
+          "total_pages": {
+            "type": "integer",
+            "description": "Total number of pages."
+          },
+          "first_page": {
+            "type": "integer",
+            "description": "First available page number."
+          },
+          "last_page": {
+            "type": "integer",
+            "description": "Last available page number."
+          },
+          "page": {
+            "type": "integer",
+            "description": "Current page number."
+          },
+          "previous_page": {
+            "type": "integer",
+            "description": "Previous page number."
+          },
+          "next_page": {
+            "type": "integer",
+            "description": "Next page number."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true,
+            "description": "Unique identifier.",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "What needs doing.",
+            "example": "Buy milk"
+          },
+          "finished": {
+            "type": "boolean",
+            "description": "Whether the task is complete.",
+            "example": false
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "TaskCreate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What needs doing.",
+            "example": "Buy milk"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "TaskUpdate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "New title.",
+            "example": "Buy oat milk"
+          },
+          "finished": {
+            "type": "boolean",
+            "description": "New completion state.",
+            "example": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteResult": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Task deleted"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "DEFAULT_ERROR": {
+        "description": "Default error response",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

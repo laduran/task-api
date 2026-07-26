@@ -1,0 +1,7 @@
+Flask>=3.0.0
+flask-smorest>=0.44.0
+marshmallow>=4.0.0
+
+# Test / dev
+pytest>=8.0.0
+openapi-spec-validator>=0.7.0
