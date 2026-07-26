@@ -11,6 +11,7 @@ from flask.views import MethodView
 from flask_smorest import Api, Blueprint, abort
 from sqlalchemy import select
 
+import auth
 import db
 from models import Task
 from schemas import DeleteResultSchema, TaskCreateSchema, TaskSchema, TaskUpdateSchema
@@ -22,8 +23,27 @@ blp = Blueprint("tasks", __name__, description="Create, read, update and delete 
 ErrorSchema = Api.ERROR_SCHEMA
 
 
+def _owner_id() -> int:
+    """The signed-in user's id.
+
+    Safe to assume non-None: auth's before_request hook already rejected the
+    request with 401 before routing ever reached this Blueprint.
+    """
+    user = auth.current_user()
+    assert user is not None
+    return user.id
+
+
 def _get_task_or_404(task_id: int) -> Task:
-    task = db.session().get(Task, task_id)
+    """Fetch a task, scoped to the signed-in user.
+
+    A task that exists but belongs to someone else returns 404, the same as
+    one that doesn't exist at all — a 403 here would confirm to an attacker
+    that the id belongs to *someone*, just not them.
+    """
+    task = db.session().scalar(
+        select(Task).where(Task.id == task_id, Task.owner_id == _owner_id())
+    )
     if task is None:
         abort(404, message="Task not found")
     return task
@@ -34,21 +54,25 @@ class TaskCollection(MethodView):
     @blp.doc(operationId="listTasks", summary="List tasks")
     @blp.response(200, TaskSchema(many=True), description="Every stored task.")
     def get(self) -> list[Task]:
-        """Return every task, oldest first.
+        """Return the signed-in user's tasks, oldest first.
 
         The ordering is explicit on purpose: Postgres makes no guarantee about
         row order without ORDER BY, and an UPDATE can relocate a row.
         """
-        return list(db.session().scalars(select(Task).order_by(Task.id)))
+        return list(
+            db.session().scalars(
+                select(Task).where(Task.owner_id == _owner_id()).order_by(Task.id)
+            )
+        )
 
     @blp.doc(operationId="createTask", summary="Create a task")
     @blp.arguments(TaskCreateSchema)
     @blp.response(201, TaskSchema, description="The newly created task.")
     @blp.alt_response(422, schema=ErrorSchema, description="The title is missing or blank.")
     def post(self, payload: dict[str, object]) -> Task:
-        """Create a new task."""
+        """Create a new task, owned by the signed-in user."""
         session = db.session()
-        task = Task(title=str(payload["title"]).strip())
+        task = Task(title=str(payload["title"]).strip(), owner_id=_owner_id())
         session.add(task)
         session.commit()
         return task

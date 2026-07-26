@@ -8,6 +8,7 @@ disk explicitly with ``python app.py --dump-openapi``.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from flask import Flask, request
@@ -15,6 +16,7 @@ from flask_smorest import Api
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+import auth
 import db
 import metrics
 from views import blp
@@ -30,6 +32,20 @@ def create_app(database_url: str | None = None) -> Flask:
     # point between the two halves — the frontend build writes into it and the
     # backend serves from it.
     app = Flask(__name__, static_folder="../static", static_url_path="/static")
+
+    # Signs the session cookie. Dev fallback is fine for local testing and
+    # CI — nothing sensitive lives behind it until a real SECRET_KEY is set
+    # in Render's dashboard, same treatment as DATABASE_URL.
+    app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-not-for-production")
+    app.config["GOOGLE_CLIENT_ID"] = os.environ.get("GOOGLE_CLIENT_ID", "dev-client-id")
+    app.config["GOOGLE_CLIENT_SECRET"] = os.environ.get("GOOGLE_CLIENT_SECRET", "dev-client-secret")
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    # Defaults to secure-only. Local dev over plain http needs this off, via
+    # SESSION_COOKIE_SECURE=false in .env, or the browser will never send the
+    # cookie back and login will appear to silently fail.
+    app.config["SESSION_COOKIE_SECURE"] = (
+        os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true"
+    )
 
     app.config["API_TITLE"] = "Task API"
     app.config["API_VERSION"] = "1.0.0"
@@ -49,7 +65,11 @@ def create_app(database_url: str | None = None) -> Flask:
     }
 
     db.init_app(app, database_url)
+    # metrics before auth: its before_request hook must run first so the
+    # timer is already started when auth's hook checks login and possibly
+    # aborts — otherwise a 401 would go unrecorded in the dashboard.
     metrics.init_app(app)
+    auth.init_app(app)
 
     api = Api(app)
     api.register_blueprint(blp)
@@ -78,6 +98,14 @@ def create_app(database_url: str | None = None) -> Flask:
         not part of the API surface.
         """
         return app.send_static_file("dashboard.html")
+
+    @app.get("/favicon.ico")
+    def favicon() -> Any:
+        """Some browsers probe this path directly regardless of the <link
+        rel=icon> tag in the page. Serving it here means that probe gets a
+        real 200, not a 404 padding out the metrics dashboard's error rate.
+        """
+        return app.send_static_file("favicon.ico")
 
     @app.get("/metrics/summary")
     def metrics_summary() -> Any:

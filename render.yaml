@@ -30,6 +30,20 @@ services:
       - key: DATABASE_URL
         sync: false
 
+      # Signs the session cookie. Generate with: python -c "import secrets;
+      # print(secrets.token_hex(32))" — set once in the dashboard, never
+      # committed, same treatment as DATABASE_URL.
+      - key: SECRET_KEY
+        sync: false
+
+      # From Google Cloud Console → APIs & Services → Credentials. The Client
+      # ID isn't sensitive on its own, but keeping both dashboard-only avoids
+      # mixing "committed config" and "dashboard config" for one feature.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
       # The free instance has 512 MB RAM; two sync workers fit comfortably.
       - key: WEB_CONCURRENCY
         value: 2
