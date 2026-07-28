@@ -136,19 +136,19 @@
               <!-- display mode -->
               <span class="title" :class="{ done: task.finished }"
                     x-show="editingId !== task.id"
-                    @dblclick="startEdit(task)"
+                    @dblclick="startEdit(task, $el)"
                     x-text="task.title"
                     title="Double-click to edit"></span>
 
               <!-- edit mode: no request, purely client state -->
-              <input class="title" type="text" x-show="editingId === task.id" x-ref="edit"
+              <input class="title" type="text" x-show="editingId === task.id"
                      x-model="editTitle"
                      @keydown.enter="saveEdit(task)"
                      @keydown.escape="editingId = null"
                      @blur="saveEdit(task)">
 
-              <button class="icon" @click="startEdit(task)" x-show="editingId !== task.id"
-                      :aria-label="`Edit ${task.title}`">edit</button>
+              <button class="icon" @click="startEdit(task, $el)" x-show="editingId !== task.id"
+                      :aria-label="`Edit ${task.title}`">✏️</button>
               <button class="icon" @click="remove(task)" :aria-label="`Delete ${task.title}`">🗑</button>
             </li>
           </template>
