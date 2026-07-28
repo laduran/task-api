@@ -27,7 +27,7 @@ export interface TaskAppData {
   load(): Promise<void>;
   add(): Promise<void>;
   toggle(task: Task): Promise<void>;
-  startEdit(task: Task): void;
+  startEdit(task: Task, source: HTMLElement): void;
   saveEdit(task: Task): Promise<void>;
   remove(task: Task): Promise<void>;
 }
@@ -39,11 +39,6 @@ function messageOf(error: unknown): string {
   return String(error);
 }
 
-/**
- * Creates the Alpine component that manages task state, filtering, editing, and persistence.
- *
- * @returns The initialized task application component.
- */
 export function taskApp(): AlpineComponent<TaskAppData> {
   // Kept in closure scope rather than on the data object so Alpine does not
   // wrap the client in a reactive proxy.
@@ -144,13 +139,19 @@ export function taskApp(): AlpineComponent<TaskAppData> {
       }
     },
 
-    /** Entering edit mode is pure client state — no request at all. */
-    startEdit(task: Task): void {
+    /** Entering edit mode is pure client state — no request at all.
+     *
+     * Looked up from *source* (the clicked element's own row) rather than
+     * $refs: every task's edit input shares the x-for loop, so a single
+     * $refs name would resolve to whichever one registered last -- always
+     * the same task regardless of which row was actually clicked.
+     */
+    startEdit(task: Task, source: HTMLElement): void {
       this.editingId = task.id;
       this.editTitle = task.title;
       this.$nextTick(() => {
-        const input = this.$refs["edit"];
-        if (input instanceof HTMLInputElement) {
+        const input = source.closest("li")?.querySelector<HTMLInputElement>("input.title");
+        if (input) {
           input.focus();
           input.select();
         }
