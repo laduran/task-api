@@ -83,4 +83,7 @@ def downgrade() -> None:
         "EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM taskapi_app', current_database()); "
         "END $$;"
     )
+    # Only safe to run once DATABASE_URL has been reverted to the owner role
+    # (or another role) — if taskapi_app is still the live connection role,
+    # this drops it out from under production and every new connection fails.
     op.execute("DROP ROLE IF EXISTS taskapi_app;")
