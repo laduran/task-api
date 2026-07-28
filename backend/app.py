@@ -23,15 +23,10 @@ from views import blp
 
 
 def create_app(database_url: str | None = None) -> Flask:
-    """
-    Create and configure a Flask application instance.
-    
-    Parameters:
-        database_url (str | None): Optional database URL that overrides the
-            `DATABASE_URL` environment variable.
-    
-    Returns:
-        Flask: The configured application instance.
+    """Build an application instance.
+
+    *database_url* overrides ``DATABASE_URL``; the test suite uses it to point
+    at a separate database.
     """
     # static/ lives at the project root, not under backend/: it is the handoff
     # point between the two halves — the frontend build writes into it and the
@@ -96,7 +91,10 @@ def create_app(database_url: str | None = None) -> Flask:
 
     @app.get("/favicon.ico")
     def favicon() -> Any:
-        """Serve the site's favicon to browser requests."""
+        """Some browsers probe this path directly regardless of the <link
+        rel=icon> tag in the page. Serving it here means that probe gets a
+        real 200 instead of a 404.
+        """
         return app.send_static_file("favicon.ico")
 
     @app.get("/healthz")

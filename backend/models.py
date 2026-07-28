@@ -53,5 +53,4 @@ class Task(Base):
     )
 
     def __repr__(self) -> str:
-        """Return a concise string representation of the task's identifier and completion status."""
         return f"<Task id={self.id!r} finished={self.finished!r}>"

@@ -43,8 +43,10 @@ def app():
 
 @pytest.fixture(autouse=True)
 def clean_tables(app):
-    """
-    Clear the task and user tables and reset their identity sequences before each test.
+    """Empty the tables and reset the id sequence before each test.
+
+    users is truncated in the same statement as tasks (which references it
+    via owner_id) so Postgres handles the FK ordering in one go.
     """
     with app.extensions["engine"].begin() as connection:
         connection.execute(text("TRUNCATE tasks, users RESTART IDENTITY CASCADE"))
