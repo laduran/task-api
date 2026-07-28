@@ -39,6 +39,11 @@ function messageOf(error: unknown): string {
   return String(error);
 }
 
+/**
+ * Creates the Alpine component that manages task state, filtering, editing, and persistence.
+ *
+ * @returns The initialized task application component.
+ */
 export function taskApp(): AlpineComponent<TaskAppData> {
   // Kept in closure scope rather than on the data object so Alpine does not
   // wrap the client in a reactive proxy.

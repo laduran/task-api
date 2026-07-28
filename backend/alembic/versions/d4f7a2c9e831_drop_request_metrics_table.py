@@ -21,12 +21,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    """Remove the retired request metrics table from the database."""
     op.drop_table('request_metrics')
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """
+    Recreate the request metrics table when reverting the migration.
+    """
     op.create_table('request_metrics',
     sa.Column('minute', sa.DateTime(timezone=True), nullable=False),
     sa.Column('status_class', sa.String(length=3), nullable=False),
