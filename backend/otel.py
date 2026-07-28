@@ -15,14 +15,26 @@ down every request with doomed export attempts.
 
 from __future__ import annotations
 
+import logging
 import os
 
 from flask import Flask
 
+_log = logging.getLogger(__name__)
+
+# create_app() runs more than once in the same process (the module-level
+# `app = create_app()` in app.py, then again on the --dump-openapi path) --
+# the OTel SDK's global providers can only be set once, so a second call
+# would leave an extra, detached exporter/processor set that never gets used
+# or shut down. This makes init_app idempotent instead.
+_initialized = False
+
 
 def init_app(app: Flask) -> None:
-    if not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
+    global _initialized
+    if not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or _initialized:
         return
+    _initialized = True
 
     # Imported lazily: these packages (and their transitive dependencies)
     # have no reason to load, or even be installed as more than an unused
@@ -71,15 +83,23 @@ def shutdown() -> None:
     restart can be lost -- the batch processor exports on a timer, not
     immediately.
     """
-    if not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
+    if not _initialized:
         return
 
     from opentelemetry import metrics, trace
 
+    # Independent try/excepts: a failure flushing traces should not prevent
+    # metrics from getting their own chance to flush, and vice versa.
     tracer_provider = trace.get_tracer_provider()
     if hasattr(tracer_provider, "shutdown"):
-        tracer_provider.shutdown()
+        try:
+            tracer_provider.shutdown()
+        except Exception:
+            _log.warning("failed to shut down OTel tracer provider", exc_info=True)
 
     meter_provider = metrics.get_meter_provider()
     if hasattr(meter_provider, "shutdown"):
-        meter_provider.shutdown()
+        try:
+            meter_provider.shutdown()
+        except Exception:
+            _log.warning("failed to shut down OTel meter provider", exc_info=True)

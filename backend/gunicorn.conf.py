@@ -34,7 +34,13 @@ def worker_exit(server, worker):
     The batch span processor and periodic metric reader both export on a
     timer; without an explicit flush here, telemetry from the last few
     seconds of a worker's life (deploys, restarts) would otherwise be lost.
+
+    Caught broadly: an exception escaping a Gunicorn server hook is a worse
+    outcome than a missed telemetry flush.
     """
     import otel
 
-    otel.shutdown()
+    try:
+        otel.shutdown()
+    except Exception:
+        server.log.warning("otel.shutdown() failed during worker exit", exc_info=True)
