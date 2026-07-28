@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && esbuild src/app.ts src/dashboard.ts --bundle --minify --sourcemap --target=es2020 --format=iife --outdir=../static/js",
-    "dev": "esbuild src/app.ts src/dashboard.ts --bundle --sourcemap --target=es2020 --format=iife --outdir=../static/js --watch=forever"
+    "build": "npm run typecheck && esbuild src/app.ts --bundle --minify --sourcemap --target=es2020 --format=iife --outdir=../static/js",
+    "dev": "esbuild src/app.ts --bundle --sourcemap --target=es2020 --format=iife --outdir=../static/js --watch=forever"
   },
   "dependencies": {
     "alpinejs": "^3.14.1"

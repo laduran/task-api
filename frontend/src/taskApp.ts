@@ -110,6 +110,15 @@ export function taskApp(): AlpineComponent<TaskAppData> {
         this.error = messageOf(error);
       } finally {
         this.busy = false;
+        // Disabling the input while busy blurs it (a disabled element can't
+        // hold focus) -- re-focus once it's re-enabled so pressing Enter to
+        // add a task doesn't kick the cursor out of the box.
+        this.$nextTick(() => {
+          const input = this.$refs["newTitle"];
+          if (input instanceof HTMLInputElement) {
+            input.focus();
+          }
+        });
       }
     },
 

@@ -87,8 +87,7 @@
             x-text="$store.theme.isDark ? '☀' : '☾'"></button>
   </div>
   <p class="sub">Alpine.js front end for the Flask <code>/tasks</code> API. See
-    <a href="/docs">/docs</a> for the generated OpenAPI spec, or the
-    <a href="/dashboard">request dashboard</a> for basic golden-signal metrics.</p>
+    <a href="/docs">/docs</a> for the generated OpenAPI spec.</p>
 
   <template x-if="!$store.auth.loading && !$store.auth.authenticated">
     <div class="panel signin">
@@ -107,7 +106,7 @@
 
       <div class="panel">
         <form class="add" @submit.prevent="add()">
-          <input type="text" x-model="newTitle" placeholder="What needs doing?" :disabled="busy">
+          <input type="text" x-ref="newTitle" x-model="newTitle" placeholder="What needs doing?" :disabled="busy">
           <button class="primary" type="submit" :disabled="busy || !newTitle.trim()">Add</button>
         </form>
 
@@ -150,7 +149,7 @@
 
               <button class="icon" @click="startEdit(task)" x-show="editingId !== task.id"
                       :aria-label="`Edit ${task.title}`">edit</button>
-              <button class="icon" @click="remove(task)" :aria-label="`Delete ${task.title}`">✕</button>
+              <button class="icon" @click="remove(task)" :aria-label="`Delete ${task.title}`">🗑</button>
             </li>
           </template>
         </ul>

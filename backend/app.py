@@ -11,14 +11,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from flask import Flask, request
+from flask import Flask
 from flask_smorest import Api
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 import auth
 import db
-import metrics
 import otel
 from views import blp
 
@@ -69,10 +68,6 @@ def create_app(database_url: str | None = None) -> Flask:
     # Needs the engine that init_app just attached, to instrument SQLAlchemy;
     # a no-op if OTEL_EXPORTER_OTLP_ENDPOINT isn't set (local dev, CI, tests).
     otel.init_app(app)
-    # metrics before auth: its before_request hook must run first so the
-    # timer is already started when auth's hook checks login and possibly
-    # aborts — otherwise a 401 would go unrecorded in the dashboard.
-    metrics.init_app(app)
     auth.init_app(app)
 
     api = Api(app)
@@ -94,32 +89,13 @@ def create_app(database_url: str | None = None) -> Flask:
         """
         return app.send_static_file("index.html")
 
-    @app.route("/dashboard")
-    def dashboard() -> Any:
-        """Serve the basic golden-signal metrics dashboard.
-
-        Deliberately outside the Blueprint, like ``index`` above — a page,
-        not part of the API surface.
-        """
-        return app.send_static_file("dashboard.html")
-
     @app.get("/favicon.ico")
     def favicon() -> Any:
         """Some browsers probe this path directly regardless of the <link
         rel=icon> tag in the page. Serving it here means that probe gets a
-        real 200, not a 404 padding out the metrics dashboard's error rate.
+        real 200 instead of a 404.
         """
         return app.send_static_file("favicon.ico")
-
-    @app.get("/metrics/summary")
-    def metrics_summary() -> Any:
-        """Aggregated request counts and latency for the dashboard.
-
-        Deliberately outside the API Blueprint, like /healthz and /readyz —
-        this is operational data about the service, not the public Task API.
-        """
-        minutes = request.args.get("minutes", default=60, type=int) or 60
-        return metrics.summary(minutes)
 
     @app.get("/healthz")
     def healthz() -> Any:
