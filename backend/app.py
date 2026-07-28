@@ -19,6 +19,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import auth
 import db
 import metrics
+import otel
 from views import blp
 
 
@@ -65,6 +66,9 @@ def create_app(database_url: str | None = None) -> Flask:
     }
 
     db.init_app(app, database_url)
+    # Needs the engine that init_app just attached, to instrument SQLAlchemy;
+    # a no-op if OTEL_EXPORTER_OTLP_ENDPOINT isn't set (local dev, CI, tests).
+    otel.init_app(app)
     # metrics before auth: its before_request hook must run first so the
     # timer is already started when auth's hook checks login and possibly
     # aborts — otherwise a 401 would go unrecorded in the dashboard.

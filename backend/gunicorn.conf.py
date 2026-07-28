@@ -26,3 +26,15 @@ graceful_timeout = 30
 # homeless container user cannot create — it logs a permission error on every
 # boot. Nothing here uses the control interface, so turn it off.
 control_socket_disable = True
+
+
+def worker_exit(server, worker):
+    """Flush buffered OTel spans/metrics before a worker goes away.
+
+    The batch span processor and periodic metric reader both export on a
+    timer; without an explicit flush here, telemetry from the last few
+    seconds of a worker's life (deploys, restarts) would otherwise be lost.
+    """
+    import otel
+
+    otel.shutdown()

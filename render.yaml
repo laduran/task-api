@@ -47,3 +47,15 @@ services:
       # The free instance has 512 MB RAM; two sync workers fit comfortably.
       - key: WEB_CONCURRENCY
         value: 2
+
+      # Grafana Cloud's OTLP gateway URL, e.g.
+      # https://otlp-gateway-<region>.grafana.net/otlp -- from Grafana
+      # Cloud's "Configure" page for a stack. Unset means no telemetry is
+      # exported at all (otel.py becomes a no-op), so this is optional.
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+
+      # "Authorization=Basic <base64 of instanceID:apiToken>", from the same
+      # Grafana Cloud page. Never committed, same treatment as SECRET_KEY.
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false
