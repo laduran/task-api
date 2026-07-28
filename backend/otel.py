@@ -34,7 +34,6 @@ def init_app(app: Flask) -> None:
     global _initialized
     if not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or _initialized:
         return
-    _initialized = True
 
     # Imported lazily: these packages (and their transitive dependencies)
     # have no reason to load, or even be installed as more than an unused
@@ -74,6 +73,19 @@ def init_app(app: Flask) -> None:
     # Needs the engine directly (not just the Flask app) to hook SQLAlchemy's
     # own event system; db.init_app must already have run by this point.
     SQLAlchemyInstrumentor().instrument(engine=app.extensions["engine"])
+
+    # Only marked done once every step above has actually succeeded, so a
+    # failure here (bad env var, exporter construction error) leaves
+    # _initialized False and a later create_app() call in the same process
+    # can retry instead of silently no-op'ing forever. Note this can't undo
+    # a set_tracer_provider()/set_meter_provider() call that already
+    # succeeded before a later step failed -- OTel's global providers are
+    # one-shot by design (see set_tracer_provider's own warning, reproduced
+    # by the double-init this flag guards against) and expose no public
+    # "unset". A retry after a partial failure would hit "Overriding
+    # of current ... is not allowed" rather than a clean re-init; accepted
+    # as a known limitation rather than worked around with private API.
+    _initialized = True
 
 
 def shutdown() -> None:
