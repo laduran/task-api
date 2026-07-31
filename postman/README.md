@@ -1,13 +1,21 @@
 # Task API stress test
 
-Cycles through: create a task -> rename it -> toggle `finished` a random
-number of times (2-10) -> delete it. One cycle per Collection Runner
-iteration.
+Mirrors the live collection in the Postman workspace (My Workspace >
+PythonTODO > Stress Test folder). Cycles through: create a task -> rename it
+-> toggle `finished` a random number of times (2-10) -> delete it. One cycle
+per Collection Runner iteration.
+
+This backup is a point-in-time export - if you edit the requests/scripts in
+the Postman app, re-export to keep this in sync (see "Keeping this in sync"
+below).
 
 ## Files
 
-- `stress-test.postman_collection.json` - the 4 requests + chaining scripts
-- `stress-test.postman_environment.json` - `base_url` and `session_cookie` variables
+- `stress-test.postman_collection.json` - collection "PythonTODO" containing
+  the "Stress Test" folder (4 requests + chaining scripts)
+- `stress-test.postman_environment.json` - environment "PythonTODO Cloud
+  Stress": `base_url` (currently `https://task-api-zv2i.onrender.com`) and
+  `session_cookie` variables
 
 ## Auth: this API has no API key
 
@@ -19,9 +27,8 @@ browser session's cookie:
 2. Open DevTools -> Application (Chrome) / Storage (Firefox) -> Cookies ->
    your app's origin.
 3. Copy the value of the `session` cookie.
-4. In Postman, open the `Task API Stress Test Env` environment and paste it
-   into `session_cookie`. Set `base_url` to the deployed URL (no trailing
-   slash).
+4. In Postman, open the `PythonTODO Cloud Stress` environment and paste it
+   into `session_cookie`. `base_url` is already set to the deployed URL.
 
 This cookie is a signed value with no server-side session store, so it stays
 valid independent of the browser tab it came from - it won't expire just
@@ -56,7 +63,20 @@ real concurrent load. To generate actual concurrency, either:
 
 ## A note on hitting the deployed instance
 
+`task-api` runs on Render's free plan, which spins the instance down after
+~15 minutes of no traffic. The first request after an idle gap can take
+30-60+ seconds (cold start) and may time out - retry it once. Once the loop
+is running continuously it keeps the instance awake on its own.
+
 This points at whatever `base_url` you configure - be sure that's a
 non-production / staging deployment, or one you're fine putting load on, since
 sustained runs can rack up cloud costs or trip rate limits on a free-tier
 service.
+
+## Keeping this in sync
+
+This JSON is exported from the live Postman collection, not the source of
+truth - the Postman workspace is. If you edit requests or scripts in the app,
+these files go stale silently (nothing enforces re-export). Either re-export
+periodically, or switch to Postman's native "Connect Git" integration on the
+collection to sync automatically instead of maintaining this by hand.
