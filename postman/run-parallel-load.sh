@@ -12,7 +12,14 @@ DELAY_MS="${3:-10}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COLLECTION="$SCRIPT_DIR/stress-test.postman_collection.json"
+LOCAL_ENVIRONMENT="$SCRIPT_DIR/stress-test.local.postman_environment.json"
 ENVIRONMENT="$SCRIPT_DIR/stress-test.postman_environment.json"
+if [ -f "$LOCAL_ENVIRONMENT" ]; then
+  ENVIRONMENT="$LOCAL_ENVIRONMENT"
+else
+  echo "No $LOCAL_ENVIRONMENT found — using the tracked template, whose" \
+       "session_cookie is blank. Every request will 401. See postman/README.md."
+fi
 LOG_DIR="$SCRIPT_DIR/run-logs/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$LOG_DIR"
 

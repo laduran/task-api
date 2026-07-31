@@ -27,8 +27,14 @@ browser session's cookie:
 2. Open DevTools -> Application (Chrome) / Storage (Firefox) -> Cookies ->
    your app's origin.
 3. Copy the value of the `session` cookie.
-4. In Postman, open the `PythonTODO Cloud Stress` environment and paste it
-   into `session_cookie`. `base_url` is already set to the deployed URL.
+4. **In the Postman app:** open the `PythonTODO Cloud Stress` environment and
+   paste it into `session_cookie`. `base_url` is already set to the deployed
+   URL.
+5. **For `run-parallel-load.sh` / Newman:** copy
+   `stress-test.local.postman_environment.json` (gitignored - never commit a
+   real cookie) and paste the cookie into its `session_cookie` value. The
+   script prefers this file automatically if it exists, falling back to the
+   tracked template (whose `session_cookie` stays permanently blank) otherwise.
 
 This cookie is a signed value with no server-side session store, so it stays
 valid independent of the browser tab it came from - it won't expire just
