@@ -55,11 +55,27 @@ requests fire.
 
 **Real concurrent load:** a single Runner/Newman run executes iterations
 sequentially, not in parallel - fine for a slow trickle of traffic, but not
-real concurrent load. To generate actual concurrency, either:
+real concurrent load. Use `run-parallel-load.sh`:
 
-- run several `newman run ...` processes at once (e.g. a `for i in $(seq 1 10); do npx newman run ... & done; wait`), or
-- use Postman's built-in Performance testing (Run Collection -> Performance
-  tab) which supports virtual users and ramp-up.
+```bash
+./postman/run-parallel-load.sh <workers> <iterations-per-worker> <delay-ms>
+# e.g. 10 concurrent workers, 25 iterations each, 10ms delay between requests
+./postman/run-parallel-load.sh 10 25 10
+```
+
+Each worker is a separate `newman` OS process with its own independent
+in-memory collection variables, so there's no cross-worker race on
+`task_id`/`toggle_count`/etc. Per-worker output goes to
+`postman/run-logs/<timestamp>/worker-N.log` (gitignored).
+
+We tried Postman's in-app Performance testing (Run -> Performance tab,
+virtual users + duration) first, but it failed to start with a generic,
+undiagnosable error ("Postman encountered an error... Please try again",
+nothing logged to console) - possibly because virtual users there may not
+share this collection's `pm.execution.setNextRequest` toggle-loop the way
+Collection Runner does, or because its virtual users share variable state in
+a way our collection-scoped variables don't handle safely under concurrency.
+Parallel Newman sidesteps both problems entirely.
 
 ## A note on hitting the deployed instance
 

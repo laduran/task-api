@@ -16,3 +16,6 @@ static/js/
 .env
 .env.*
 *.secret
+
+# Newman parallel-load run output
+postman/run-logs/
