@@ -36,6 +36,15 @@ browser session's cookie:
    script prefers this file automatically if it exists, falling back to the
    tracked template (whose `session_cookie` stays permanently blank) otherwise.
 
+`session_cookie` is a live credential - it grants full access to whatever
+Google account signed in to get it, equivalent to a password. Keep the
+`PythonTODO Cloud Stress` Postman environment private: don't invite anyone
+else into the workspace while it holds a real cookie, and don't export or
+share that environment. The gitignored local file above only keeps the
+cookie out of *this git repo* - it does nothing to protect the copy stored in
+Postman's own cloud environment, which is a separate credential-handling
+concern you're responsible for in the Postman app itself.
+
 This cookie is a signed value with no server-side session store, so it stays
 valid independent of the browser tab it came from - it won't expire just
 because you close the browser or log out elsewhere. It does stop working if
