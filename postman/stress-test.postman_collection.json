@@ -1,0 +1,185 @@
+{
+  "info": {
+    "name": "PythonTODO",
+    "_postman_id": "f758d104-2a01-4b29-9aeb-76acc374860e",
+    "description": "Mirrors the live Postman workspace collection (My Workspace > PythonTODO). The Stress Test folder chains: create a task, rename it, toggle its done/not-done state a random number of times (2-10), then delete it. Run the folder via Collection Runner (set Iterations to however many cycles you want) or via Newman for scripted/parallel load generation.\n\nRequires an authenticated session cookie for the deployed app's Google OAuth login (see postman/README.md).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "task_id", "value": "" },
+    { "key": "toggle_count", "value": "" },
+    { "key": "toggle_iteration", "value": "" },
+    { "key": "current_finished", "value": "false" }
+  ],
+  "item": [
+    {
+      "name": "Stress Test",
+      "id": "b2f1a6d4-3c9e-4b7a-9f2d-stresstest01",
+      "item": [
+        {
+          "name": "1. Create Task",
+          "id": "a1e2c3d4-1111-4b7a-9f2d-stresstest02",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie", "value": "session={{session_cookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Stress task {{$timestamp}}-{{$randomInt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["tasks"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Task created (201)\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const task = pm.response.json();",
+                  "pm.collectionVariables.set(\"task_id\", task.id);",
+                  "",
+                  "// Random number of toggles between 2 and 10 inclusive.",
+                  "const toggleCount = Math.floor(Math.random() * 9) + 2;",
+                  "pm.collectionVariables.set(\"toggle_count\", toggleCount);",
+                  "pm.collectionVariables.set(\"toggle_iteration\", 0);",
+                  "pm.collectionVariables.set(\"current_finished\", \"false\");",
+                  "",
+                  "console.log(`Created task ${task.id}; will toggle ${toggleCount} times`);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Edit Task Name",
+          "id": "a1e2c3d4-2222-4b7a-9f2d-stresstest03",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie", "value": "session={{session_cookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Edited task {{$timestamp}}-{{$randomInt}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Task renamed (200)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Toggle Task State",
+          "id": "a1e2c3d4-3333-4b7a-9f2d-stresstest04",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Cookie", "value": "session={{session_cookie}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"finished\": {{current_finished}}\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const current = pm.collectionVariables.get(\"current_finished\");",
+                  "const next = current === \"true\" ? \"false\" : \"true\";",
+                  "pm.collectionVariables.set(\"current_finished\", next);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Task toggled (200)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// var, not const/let: Newman reuses this script's context across",
+                  "// repeated setNextRequest calls to this same request, so a block-scoped",
+                  "// redeclaration throws a SyntaxError starting on the 2nd invocation.",
+                  "var iteration = parseInt(pm.collectionVariables.get(\"toggle_iteration\"), 10) + 1;",
+                  "pm.collectionVariables.set(\"toggle_iteration\", iteration);",
+                  "",
+                  "var target = parseInt(pm.collectionVariables.get(\"toggle_count\"), 10);",
+                  "",
+                  "if (iteration < target) {",
+                  "    pm.execution.setNextRequest(\"3. Toggle Task State\");",
+                  "} else {",
+                  "    pm.execution.setNextRequest(\"4. Delete Task\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Delete Task",
+          "id": "a1e2c3d4-4444-4b7a-9f2d-stresstest05",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Cookie", "value": "session={{session_cookie}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_id}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Task deleted (200)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

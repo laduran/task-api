@@ -16,3 +16,10 @@ static/js/
 .env
 .env.*
 *.secret
+
+# Newman parallel-load run output
+postman/run-logs/
+
+# Real secrets for local stress-test runs — never commit the actual
+# session_cookie value; the tracked environment file keeps it blank.
+postman/stress-test.local.postman_environment.json
